@@ -519,7 +519,7 @@ def activate_user_endpoint(
 # 設計書：
 # - 設計書/main/認証・ユーザー管理/ユーザー一覧取得_v0.2.0.md
 # - 設計書/main/認証・ユーザー管理/ユーザー詳細取得_v0.2.0.md
-# - 設計書/main/認証・ユーザー管理/自分の情報取得_v0.2.0.md
+# - 設計書/main/認証・ユーザー管理/自分の情報取得_v0.3.0.md
 # ====================================================================================================
 
 
@@ -560,12 +560,12 @@ def get_users_endpoint(
 
 @app.get("/users/me")
 def get_my_info_endpoint(
-    current_user: User = Depends(auth.require_password_changed),
+    current_user: User = Depends(auth.get_current_active_user),
 ) -> UserGetResponse:
     """
     自分の情報取得
 
-    設計書：設計書/main/認証・ユーザー管理/自分の情報取得_v0.2.0.md
+    設計書：設計書/main/認証・ユーザー管理/自分の情報取得_v0.3.0.md
 
     【処理概要】
     - ログイン中のユーザー本人が、自分の情報を取得する

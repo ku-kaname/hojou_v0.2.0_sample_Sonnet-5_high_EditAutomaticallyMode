@@ -7,14 +7,48 @@
  */
 
 import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { AdminRoute } from "./components/AdminRoute";
+import { Layout } from "./components/Layout";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 import { AuthProvider } from "./contexts/AuthContext";
+import { ChangePasswordPage } from "./pages/ChangePasswordPage";
+import { LoginPage } from "./pages/LoginPage";
+import { UserManagementPage } from "./pages/UserManagementPage";
 
 export function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          {/* 画面単位のルートは、各対応する機能群の実装バックログで本ファイルへ追記する */}
+          <Route
+            path="/login"
+            element={
+              <Layout>
+                <LoginPage />
+              </Layout>
+            }
+          />
+          <Route
+            path="/change-password"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <ChangePasswordPage />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/users"
+            element={
+              <AdminRoute>
+                <Layout>
+                  <UserManagementPage />
+                </Layout>
+              </AdminRoute>
+            }
+          />
+          {/* 他画面のルートは、各対応する機能群の実装バックログで本ファイルへ追記する */}
           <Route path="*" element={<p>準備中です。</p>} />
         </Routes>
       </BrowserRouter>

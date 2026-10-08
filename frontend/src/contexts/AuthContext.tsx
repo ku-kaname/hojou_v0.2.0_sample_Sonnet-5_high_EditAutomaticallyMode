@@ -14,7 +14,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { apiGet, apiPost, postForm, setAccessToken, setUnauthorizedHandler } from "../api/client";
+import {
+  apiGet,
+  apiPatch,
+  apiPost,
+  postForm,
+  setAccessToken,
+  setUnauthorizedHandler,
+} from "../api/client";
 import type { TokenResponse, UserGetResponse } from "../types/common";
 
 const ACCESS_TOKEN_STORAGE_KEY = "accessToken";
@@ -24,6 +31,7 @@ interface AuthContextValue {
   isLoading: boolean;
   login: (userId: string, password: string) => Promise<UserGetResponse>;
   logout: () => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<UserGetResponse>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -41,6 +49,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setUnauthorizedHandler(clearSession);
   }, [clearSession]);
+
+  /**
+   * 認証トークンの反映
+   *
+   * 【処理概要】
+   * - 発行されたアクセストークンを保存し、最新のユーザー情報を取得してログイン状態へ反映する
+   *
+   * 【パラメータ】
+   * - accessToken (string) : アクセストークン (必須)
+   *
+   * 【戻り値】
+   * - user (UserGetResponse) : ユーザー情報
+   *
+   * 【例外処理】
+   * - ApiError : ユーザー情報取得に失敗した場合
+   *
+   * 【処理フロー】
+   * 1. 認証トークンの保存
+   * 2. 自分の情報取得
+   * 3. 戻り値を返却
+   */
+  const applyAccessToken = useCallback(async (accessToken: string): Promise<UserGetResponse> => {
+    // 1. 認証トークンの保存
+    window.localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, accessToken);
+    setAccessToken(accessToken);
+
+    // 2. 自分の情報取得
+    const currentUser = await apiGet<UserGetResponse>("/users/me");
+    setUser(currentUser);
+
+    // 3. 戻り値を返却
+    return currentUser;
+  }, []);
 
   useEffect(() => {
     const storedToken = window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
@@ -107,28 +148,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    *
    * 【処理フロー】
    * 1. トークン発行
-   * 2. 認証トークンの保存
-   * 3. 自分の情報取得
-   * 4. 戻り値を返却
+   * 2. 認証トークンの反映
+   * 3. 戻り値を返却
    */
-  const login = useCallback(async (userId: string, password: string): Promise<UserGetResponse> => {
-    // 1. トークン発行
-    const tokenResponse = await postForm<TokenResponse>("/token", {
-      username: userId,
-      password,
-    });
+  const login = useCallback(
+    async (userId: string, password: string): Promise<UserGetResponse> => {
+      // 1. トークン発行
+      const tokenResponse = await postForm<TokenResponse>("/token", {
+        username: userId,
+        password,
+      });
 
-    // 2. 認証トークンの保存
-    window.localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, tokenResponse.access_token);
-    setAccessToken(tokenResponse.access_token);
+      // 2. 認証トークンの反映
+      const currentUser = await applyAccessToken(tokenResponse.access_token);
 
-    // 3. 自分の情報取得
-    const currentUser = await apiGet<UserGetResponse>("/users/me");
-    setUser(currentUser);
+      // 3. 戻り値を返却
+      return currentUser;
+    },
+    [applyAccessToken],
+  );
 
-    // 4. 戻り値を返却
-    return currentUser;
-  }, []);
+  /**
+   * パスワード変更
+   *
+   * 【処理概要】
+   * - 現在のパスワード・新しいパスワードでパスワード変更を行い、発行された認証トークンを保存した上で自分の情報を取得する
+   *
+   * 【パラメータ】
+   * - currentPassword (string) : 現在のパスワード (必須)
+   * - newPassword (string) : 新しいパスワード (必須)
+   *
+   * 【戻り値】
+   * - user (UserGetResponse) : ユーザー情報
+   *
+   * 【例外処理】
+   * - ApiError : 現在のパスワードが正しくない場合等
+   *
+   * 【処理フロー】
+   * 1. パスワード変更
+   * 2. 認証トークンの反映
+   * 3. 戻り値を返却
+   */
+  const changePassword = useCallback(
+    async (currentPassword: string, newPassword: string): Promise<UserGetResponse> => {
+      // 1. パスワード変更
+      const tokenResponse = await apiPatch<TokenResponse>("/users/me/password", {
+        current_password: currentPassword,
+        new_password: newPassword,
+      });
+
+      // 2. 認証トークンの反映
+      const currentUser = await applyAccessToken(tokenResponse.access_token);
+
+      // 3. 戻り値を返却
+      return currentUser;
+    },
+    [applyAccessToken],
+  );
 
   /**
    * ログアウト
@@ -160,8 +236,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [clearSession]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, isLoading, login, logout }),
-    [user, isLoading, login, logout],
+    () => ({ user, isLoading, login, logout, changePassword }),
+    [user, isLoading, login, logout, changePassword],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

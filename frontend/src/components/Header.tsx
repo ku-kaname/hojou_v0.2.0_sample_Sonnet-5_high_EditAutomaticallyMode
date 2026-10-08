@@ -5,6 +5,7 @@
  * アプリ名、ログイン中のユーザー氏名、ログアウト操作を表示する共通部品
  */
 
+import { Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 
 export function Header() {
@@ -16,6 +17,7 @@ export function Header() {
       {user !== null && (
         <p>
           {user.name}さん
+          {user.role === "管理者" && <Link to="/users">ユーザー管理</Link>}
           <button type="button" onClick={() => void logout()}>
             ログアウト
           </button>
