@@ -2,21 +2,38 @@
  * 備品詳細画面
  *
  * 【概要】
- * 指定した備品の詳細情報と、予約状況（承認済み・貸出中の期間一覧）を表示する画面
- *
- * 【備考】
- * 貸出申請（F05）は、本画面内に別バックログで追加する予定であり、本画面では実装しない。
+ * 指定した備品の詳細情報、予約状況（承認済み・貸出中の期間一覧）の表示、および貸出申請（F05）を行う画面
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
-import { apiGet, ApiError } from "../api/client";
+import { apiGet, apiPost, ApiError } from "../api/client";
 import { ErrorMessage } from "../components/ErrorMessage";
 import { LoadingIndicator } from "../components/LoadingIndicator";
-import type { EquipmentResponse, ReservationResponse } from "../types/common";
+import type { EquipmentResponse, LoanRequestCreateRequest, ReservationResponse } from "../types/common";
 
 function toErrorMessage(error: unknown, fallback: string): string {
   return error instanceof ApiError ? error.message : fallback;
+}
+
+interface LoanRequestFormState {
+  startDate: string;
+  dueDate: string;
+  purpose: string;
+}
+
+const EMPTY_LOAN_REQUEST_FORM: LoanRequestFormState = {
+  startDate: "",
+  dueDate: "",
+  purpose: "",
+};
+
+function getTodayDateString(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function EquipmentReservationTable({
@@ -57,6 +74,10 @@ export function EquipmentDetailPage() {
   const [equipment, setEquipment] = useState<EquipmentResponse | null>(null);
   const [reservationList, setReservationList] = useState<ReservationResponse[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loanRequestForm, setLoanRequestForm] = useState<LoanRequestFormState>(EMPTY_LOAN_REQUEST_FORM);
+  const [isSubmittingLoanRequest, setIsSubmittingLoanRequest] = useState(false);
+  const [loanRequestActionError, setLoanRequestActionError] = useState<string | null>(null);
+  const [loanRequestSuccessMessage, setLoanRequestSuccessMessage] = useState<string | null>(null);
 
   const loadEquipmentDetail = useCallback(async (): Promise<void> => {
     setLoadError(null);
@@ -75,6 +96,32 @@ export function EquipmentDetailPage() {
   useEffect(() => {
     void loadEquipmentDetail();
   }, [loadEquipmentDetail]);
+
+  async function handleLoanRequestSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (equipmentId === undefined) {
+      return;
+    }
+    setLoanRequestActionError(null);
+    setLoanRequestSuccessMessage(null);
+    setIsSubmittingLoanRequest(true);
+    try {
+      const loanRequestCreateRequest: LoanRequestCreateRequest = {
+        equipment_id: Number(equipmentId),
+        start_date: loanRequestForm.startDate,
+        due_date: loanRequestForm.dueDate,
+        purpose: loanRequestForm.purpose,
+      };
+      await apiPost("/loan-requests", loanRequestCreateRequest);
+      setLoanRequestForm(EMPTY_LOAN_REQUEST_FORM);
+      setLoanRequestSuccessMessage("貸出を申請しました。申請の状況は「自分の申請一覧」から確認できます。");
+      await loadEquipmentDetail();
+    } catch (error) {
+      setLoanRequestActionError(toErrorMessage(error, "貸出申請に失敗しました。"));
+    } finally {
+      setIsSubmittingLoanRequest(false);
+    }
+  }
 
   if (loadError !== null) {
     return (
@@ -120,6 +167,56 @@ export function EquipmentDetailPage() {
         <p>予約はありません。</p>
       ) : (
         <EquipmentReservationTable reservationList={reservationList} />
+      )}
+
+      <h2>貸出申請</h2>
+      {equipment.active_flag ? (
+        <form onSubmit={(event) => void handleLoanRequestSubmit(event)}>
+          {loanRequestActionError !== null && <ErrorMessage message={loanRequestActionError} />}
+          {loanRequestSuccessMessage !== null && <p role="status">{loanRequestSuccessMessage}</p>}
+          <label>
+            開始日
+            <input
+              type="date"
+              value={loanRequestForm.startDate}
+              onChange={(event) =>
+                setLoanRequestForm({ ...loanRequestForm, startDate: event.target.value })
+              }
+              min={getTodayDateString()}
+              required
+            />
+          </label>
+          <label>
+            返却予定日
+            <input
+              type="date"
+              value={loanRequestForm.dueDate}
+              onChange={(event) =>
+                setLoanRequestForm({ ...loanRequestForm, dueDate: event.target.value })
+              }
+              min={loanRequestForm.startDate || getTodayDateString()}
+              required
+            />
+          </label>
+          <label>
+            用途
+            <input
+              type="text"
+              value={loanRequestForm.purpose}
+              onChange={(event) =>
+                setLoanRequestForm({ ...loanRequestForm, purpose: event.target.value })
+              }
+              minLength={1}
+              maxLength={200}
+              required
+            />
+          </label>
+          <button type="submit" disabled={isSubmittingLoanRequest}>
+            申請
+          </button>
+        </form>
+      ) : (
+        <p>この備品は現在無効化されているため、貸出を申請できません。</p>
       )}
     </div>
   );
