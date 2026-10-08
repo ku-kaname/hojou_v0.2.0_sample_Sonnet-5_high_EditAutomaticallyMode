@@ -31,6 +31,8 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+# B008: FastAPIの依存性注入（`Depends(...)`を引数既定値に書く記法）は正式な推奨パターンのため除外する
+ignore = ["B008"]
 
 [tool.mypy]
 python_version = "3.12"
