@@ -39,6 +39,9 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["app/tests"]
 
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
