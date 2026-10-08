@@ -12,6 +12,9 @@ import { Layout } from "./components/Layout";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ChangePasswordPage } from "./pages/ChangePasswordPage";
+import { EquipmentDetailPage } from "./pages/EquipmentDetailPage";
+import { EquipmentListPage } from "./pages/EquipmentListPage";
+import { EquipmentManagementPage } from "./pages/EquipmentManagementPage";
 import { LoginPage } from "./pages/LoginPage";
 import { UserManagementPage } from "./pages/UserManagementPage";
 
@@ -44,6 +47,36 @@ export function App() {
               <AdminRoute>
                 <Layout>
                   <UserManagementPage />
+                </Layout>
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/equipment"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <EquipmentListPage />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/equipment/:equipmentId"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <EquipmentDetailPage />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/equipment-management"
+            element={
+              <AdminRoute>
+                <Layout>
+                  <EquipmentManagementPage />
                 </Layout>
               </AdminRoute>
             }

@@ -18,13 +18,16 @@ let unauthorizedHandler: (() => void) | null = null;
  *
  * 【属性】
  * - status (number): HTTPステータスコード
+ * - detail (unknown): レスポンスの`detail`項目の値（文字列以外（検証エラー一覧等の構造化内容）の場合に、呼出元で個別に解釈するための生値）
  */
 export class ApiError extends Error {
   readonly status: number;
+  readonly detail: unknown;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, detail?: unknown) {
     super(message);
     this.status = status;
+    this.detail = detail;
   }
 }
 
@@ -91,14 +94,10 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
   // 4. 例外処理：レスポンスが2xx以外
   if (!response.ok) {
     const body: unknown = await response.json().catch(() => null);
-    const detail =
-      typeof body === "object" &&
-      body !== null &&
-      "detail" in body &&
-      typeof body.detail === "string"
-        ? body.detail
-        : response.statusText;
-    throw new ApiError(response.status, detail);
+    const rawDetail =
+      typeof body === "object" && body !== null && "detail" in body ? body.detail : undefined;
+    const message = typeof rawDetail === "string" ? rawDetail : response.statusText;
+    throw new ApiError(response.status, message, rawDetail);
   }
 
   // 5. 戻り値を返却
@@ -169,5 +168,39 @@ export function postForm<T>(path: string, fields: Record<string, string>): Promi
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: formBody,
+  });
+}
+
+/**
+ * ファイルアップロードリクエスト
+ *
+ * 【処理概要】
+ * - リクエストボディをmultipart/form-data形式に変換してリクエストする（`UploadFile`でファイルを受け取るエンドポイント向け）
+ * - `Content-Type`ヘッダーはブラウザがboundary付きで自動設定するため、明示的に設定しない
+ *
+ * 【パラメータ】
+ * - path (string) : APIパス (必須)
+ * - fieldName (string) : ファイルを設定するフォーム項目名 (必須)
+ * - file (File) : アップロードファイル (必須)
+ *
+ * 【戻り値】
+ * - response (T) : レスポンスボディ（JSON）
+ *
+ * 【例外処理】
+ * - ApiError : レスポンスが2xx以外の場合
+ *
+ * 【処理フロー】
+ * 1. フォームデータへの変換
+ * 2. リクエストの送信
+ */
+export function postFormData<T>(path: string, fieldName: string, file: File): Promise<T> {
+  // 1. フォームデータへの変換
+  const formData = new FormData();
+  formData.append(fieldName, file);
+
+  // 2. リクエストの送信
+  return request<T>(path, {
+    method: "POST",
+    body: formData,
   });
 }
