@@ -9,7 +9,11 @@
 __pycache__/
 *.pyc
 .venv/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
 
 # Node
 node_modules/
 dist/
+*.tsbuildinfo

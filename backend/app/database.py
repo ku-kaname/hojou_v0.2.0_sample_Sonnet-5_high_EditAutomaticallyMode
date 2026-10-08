@@ -1,0 +1,59 @@
+"""
+DB接続管理
+
+【概要】
+データベースエンジン・セッションファクトリの生成、およびセッションの依存性注入を行う
+"""
+
+import os
+from collections.abc import Generator
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+
+DATABASE_URL = os.environ["DATABASE_URL"]
+
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+class Base(DeclarativeBase):
+    """
+    テーブルモデル共通基底クラス
+
+    【概要】
+    全テーブルモデル（`app/models.py`）の基底クラス
+    """
+
+
+def get_db() -> Generator[Session, None, None]:
+    """
+    DBセッション取得
+
+    【処理概要】
+    - リクエスト単位のDBセッションを生成し、処理完了後に解放する依存性注入関数
+
+    【パラメータ】
+    - なし
+
+    【戻り値】
+    - db (Session) : DBセッション
+
+    【例外処理】
+    - なし
+
+    【処理フロー】
+    1. DBセッションを生成
+    2. 呼び出し元へセッションを渡す
+    3. 呼び出し元の処理完了後、セッションを解放する
+    """
+
+    # 1. DBセッションを生成
+    db = SessionLocal()
+
+    try:
+        # 2. 呼び出し元へセッションを渡す
+        yield db
+    finally:
+        # 3. 呼び出し元の処理完了後、セッションを解放する
+        db.close()
