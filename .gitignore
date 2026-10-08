@@ -1,0 +1,15 @@
+# hojouスキル参照用ジャンクション（setup-skills-link.ps1で生成。実機ローカルパス依存のためコミットしない）
+/.agents/skills
+/.claude/skills
+
+# 秘密情報
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Node
+node_modules/
+dist/
