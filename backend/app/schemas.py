@@ -252,3 +252,112 @@ class EquipmentBulkImportResponse(BaseModel):
 
     registered_count: int
     equipment_list: list[EquipmentResponse]
+
+
+# ====================================================================================================
+# 貸出申請操作
+# - LoanRequestBase : 貸出申請ベース
+# - LoanRequestCreateRequest : 貸出申請登録リクエスト
+# - LoanRequestResponse : 貸出申請レスポンス
+# - LoanRequestCancelRequest : 貸出申請取消リクエスト
+# - LoanRequestRejectRequest : 貸出申請却下リクエスト
+# - LoanRequestAdminCancelRequest : 貸出申請管理者取消リクエスト
+
+# 設計書：設計書/スキーマ（schemas）/貸出申請操作_v0.3.0.md
+# ====================================================================================================
+
+
+class LoanRequestBase(BaseModel):
+    """
+    貸出申請ベース
+
+    設計書：設計書/スキーマ（schemas）/貸出申請操作_v0.3.0.md
+    """
+
+    equipment_id: int
+    start_date: dt.date
+    due_date: dt.date
+    purpose: str = Field(min_length=1, max_length=200)
+
+
+class LoanRequestCreateRequest(LoanRequestBase):
+    """
+    貸出申請登録リクエスト
+
+    設計書：設計書/スキーマ（schemas）/貸出申請操作_v0.3.0.md
+    """
+
+
+class LoanRequestResponse(LoanRequestBase):
+    """
+    貸出申請レスポンス
+
+    設計書：設計書/スキーマ（schemas）/貸出申請操作_v0.3.0.md
+    """
+
+    loan_request_id: int
+    applicant_user_id: int
+    status: str
+    reject_cancel_reason: str | None
+    approved_rejected_by_user_id: int | None
+    lent_by_user_id: int | None
+    returned_by_user_id: int | None
+    cancelled_by_user_id: int | None
+    requested_at: dt.datetime
+    approved_rejected_at: dt.datetime | None
+    lent_at: dt.datetime | None
+    returned_at: dt.datetime | None
+    cancelled_at: dt.datetime | None
+    return_note: str | None
+
+
+class LoanRequestCancelRequest(BaseModel):
+    """
+    貸出申請取消リクエスト
+
+    設計書：設計書/スキーマ（schemas）/貸出申請操作_v0.3.0.md
+    """
+
+    reason: str | None = Field(default=None, max_length=200)
+
+
+class LoanRequestRejectRequest(BaseModel):
+    """
+    貸出申請却下リクエスト
+
+    設計書：設計書/スキーマ（schemas）/貸出申請操作_v0.3.0.md
+    """
+
+    reason: str = Field(min_length=1, max_length=200)
+
+
+class LoanRequestAdminCancelRequest(BaseModel):
+    """
+    貸出申請管理者取消リクエスト
+
+    設計書：設計書/スキーマ（schemas）/貸出申請操作_v0.3.0.md
+    """
+
+    reason: str = Field(min_length=1, max_length=200)
+
+
+# ====================================================================================================
+# 通知操作
+# - NotificationResponse : 通知レスポンス
+
+# 設計書：設計書/スキーマ（schemas）/通知操作_v0.2.0.md
+# ====================================================================================================
+
+
+class NotificationResponse(BaseModel):
+    """
+    通知レスポンス
+
+    設計書：設計書/スキーマ（schemas）/通知操作_v0.2.0.md
+    """
+
+    notification_id: int
+    notification_type: str
+    loan_request_id: int
+    read_flag: bool
+    created_at: dt.datetime
