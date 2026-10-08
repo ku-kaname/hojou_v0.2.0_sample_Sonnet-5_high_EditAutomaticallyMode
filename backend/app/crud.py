@@ -1637,3 +1637,167 @@ def mark_notification_as_read(db: Session, notification_id: int) -> Notification
 
     # 2. 戻り値を返却
     return notification
+
+
+# ====================================================================================================
+# 当日通知存在確認
+# - exists_notification_today : 当日通知存在確認
+
+# 設計書：設計書/CRUD/貸出・返却・履歴/当日通知存在確認_v0.2.0.md
+# ====================================================================================================
+
+
+def exists_notification_today(
+    db: Session,
+    loan_request_id: int,
+    notification_type: str,
+    today_start: dt.datetime,
+    today_end: dt.datetime,
+) -> bool:
+    """
+    当日通知存在確認
+
+    設計書：設計書/CRUD/貸出・返却・履歴/当日通知存在確認_v0.2.0.md
+
+    【処理概要】
+    - 関連申請（内部ID）・種別が一致し、作成日時が今日（引数で渡された範囲）に含まれる通知の存在を確認する
+
+    【パラメータ】
+    - db (Session) : データベース (必須)
+    - loan_request_id (int) : 関連申請（内部ID） (必須)
+    - notification_type (str) : 種別 (必須)
+    - today_start (datetime) : 今日の開始日時（含む） (必須)
+    - today_end (datetime) : 今日の終了日時（除く） (必須)
+
+    【戻り値】
+    - exists (bool) : 当日通知存在フラグ
+
+    【例外処理】
+    - なし
+
+    【処理フロー】
+    1. 当日通知存在確認
+    2. 戻り値を返却
+    """
+
+    # 1. 当日通知存在確認
+    count = (
+        db.query(func.count(Notification.id))
+        .filter(
+            Notification.loan_request_id == loan_request_id,
+            Notification.notification_type == notification_type,
+            Notification.created_at >= today_start,
+            Notification.created_at < today_end,
+        )
+        .scalar()
+    )
+
+    # 2. 戻り値を返却
+    return count >= 1
+
+
+# ====================================================================================================
+# 貸出処理
+# - lend_loan_request : 貸出処理
+
+# 設計書：設計書/CRUD/貸出・返却・履歴/貸出処理_v0.2.0.md
+# ====================================================================================================
+
+
+def lend_loan_request(
+    db: Session,
+    loan_request_id: int,
+    lent_by_user_id: int,
+    now: dt.datetime,
+) -> LoanRequest | None:
+    """
+    貸出処理
+
+    設計書：設計書/CRUD/貸出・返却・履歴/貸出処理_v0.2.0.md
+
+    【処理概要】
+    - 状態を"貸出中"に更新し、貸出処理した管理者・貸出日時を記録する
+
+    【パラメータ】
+    - db (Session) : データベース (必須)
+    - loan_request_id (int) : 貸出申請（内部ID） (必須)
+    - lent_by_user_id (int) : 貸出処理した管理者（ユーザー内部ID） (必須)
+    - now (datetime) : 現在日時 (必須)
+
+    【戻り値】
+    - loan_request (LoanRequest | None) : 貸出申請情報（更新対象が存在しない場合はNone）
+
+    【例外処理】
+    - なし
+
+    【処理フロー】
+    1. 貸出申請情報更新
+    2. 戻り値を返却
+    """
+
+    # 1. 貸出申請情報更新
+    loan_request = db.get(LoanRequest, loan_request_id)
+    if loan_request is None:
+        return None
+    loan_request.status = "貸出中"
+    loan_request.lent_by_user_id = lent_by_user_id
+    loan_request.lent_at = now
+    db.flush()
+
+    # 2. 戻り値を返却
+    return loan_request
+
+
+# ====================================================================================================
+# 返却処理
+# - return_loan_request : 返却処理
+
+# 設計書：設計書/CRUD/貸出・返却・履歴/返却処理_v0.2.0.md
+# ====================================================================================================
+
+
+def return_loan_request(
+    db: Session,
+    loan_request_id: int,
+    returned_by_user_id: int,
+    return_note: str | None,
+    now: dt.datetime,
+) -> LoanRequest | None:
+    """
+    返却処理
+
+    設計書：設計書/CRUD/貸出・返却・履歴/返却処理_v0.2.0.md
+
+    【処理概要】
+    - 状態を"返却済み"に更新し、返却処理した管理者・返却日時・返却時状態メモを記録する
+
+    【パラメータ】
+    - db (Session) : データベース (必須)
+    - loan_request_id (int) : 貸出申請（内部ID） (必須)
+    - returned_by_user_id (int) : 返却処理した管理者（ユーザー内部ID） (必須)
+    - return_note (str | None) : 返却時状態メモ (任意。未指定の場合はnullを設定)
+    - now (datetime) : 現在日時 (必須)
+
+    【戻り値】
+    - loan_request (LoanRequest | None) : 貸出申請情報（更新対象が存在しない場合はNone）
+
+    【例外処理】
+    - なし
+
+    【処理フロー】
+    1. 貸出申請情報更新
+    2. 戻り値を返却
+    """
+
+    # 1. 貸出申請情報更新
+    loan_request = db.get(LoanRequest, loan_request_id)
+    if loan_request is None:
+        return None
+    loan_request.status = "返却済み"
+    loan_request.returned_by_user_id = returned_by_user_id
+    loan_request.returned_at = now
+    loan_request.return_note = return_note if return_note is not None else ""
+    db.flush()
+
+    # 2. 戻り値を返却
+    return loan_request

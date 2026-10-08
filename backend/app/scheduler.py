@@ -47,13 +47,17 @@ def start_scheduler() -> None:
 
     【処理フロー】
     1. ノーショー自動取消バッチジョブの登録
-    2. スケジューラの起動
+    2. 返却期限通知バッチジョブの登録
+    3. スケジューラの起動
     """
 
     # 1. ノーショー自動取消バッチジョブの登録
     scheduler.add_job(run_no_show_cancellation_batch, "cron", hour=6, minute=0, id="no_show_cancellation_batch")
 
-    # 2. スケジューラの起動
+    # 2. 返却期限通知バッチジョブの登録
+    scheduler.add_job(run_due_date_notification_batch, "cron", hour=6, minute=0, id="due_date_notification_batch")
+
+    # 3. スケジューラの起動
     scheduler.start()
 
 
@@ -131,4 +135,55 @@ def run_no_show_cancellation_batch() -> None:
         "ノーショー自動取消バッチ実行完了：開始日超過取消件数=%d、返却予定日超過取消件数=%d",
         start_date_cancelled_count,
         due_date_cancelled_count,
+    )
+
+
+# ====================================================================================================
+# 返却期限通知バッチ
+# - run_due_date_notification_batch : 返却期限通知バッチ実行
+
+# 設計書：設計書/scheduler/貸出・返却・履歴/返却期限通知バッチ_v0.2.0.md
+# ====================================================================================================
+
+
+def run_due_date_notification_batch() -> None:
+    """
+    返却期限通知バッチ実行
+
+    設計書：設計書/scheduler/貸出・返却・履歴/返却期限通知バッチ_v0.2.0.md
+
+    【処理概要】
+    - 日次バッチにより、返却期限が近い・過ぎている貸出中の貸出申請の申請者に返却期限通知を行う
+    - 返却予定日が翌日の申請、返却予定日を過ぎている申請の双方に対し、それぞれ通知する
+
+    【パラメータ】
+    - なし
+
+    【戻り値】
+    - なし
+
+    【例外処理】
+    - なし
+
+    【処理フロー】
+    1. データベースセッション取得
+    2. 返却期限通知（前日）処理の呼び出し
+    3. 返却期限通知（期限超過中）処理の呼び出し
+    4. 処理結果のログ出力
+    """
+
+    # 1. データベースセッション取得
+    get_db_context = contextmanager(get_db)
+    with get_db_context() as db:
+        # 2. 返却期限通知（前日）処理の呼び出し
+        tomorrow_notified_count = services.notify_due_date_tomorrow(db)
+
+        # 3. 返却期限通知（期限超過中）処理の呼び出し
+        overdue_notified_count = services.notify_due_date_overdue(db)
+
+    # 4. 処理結果のログ出力
+    logger.info(
+        "返却期限通知バッチ実行完了：前日通知件数=%d、期限超過中通知件数=%d",
+        tomorrow_notified_count,
+        overdue_notified_count,
     )

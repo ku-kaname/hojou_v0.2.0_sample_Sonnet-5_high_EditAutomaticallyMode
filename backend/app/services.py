@@ -2623,3 +2623,453 @@ def cancel_no_show_loan_requests_by_due_date(db: Session) -> int:
     # 4. 戻り値を返却
     cancelled_count = len(target_loan_request_list)
     return cancelled_count
+
+
+# ====================================================================================================
+# 貸出処理
+# - lend_loan_request : 貸出処理
+
+# 設計書：設計書/services/貸出・返却・履歴/貸出処理_v0.2.0.md
+# ====================================================================================================
+
+
+def lend_loan_request(current_admin: User, db: Session, loan_request_id: int) -> LoanRequestResponse:
+    """
+    貸出処理
+
+    設計書：設計書/services/貸出・返却・履歴/貸出処理_v0.2.0.md
+
+    【処理概要】
+    - 管理者が、承認済みの貸出申請に対して貸出処理を行う
+    - 状態・開始日・対象備品の有効性・同一備品の貸出中重複を確認した上で貸出中に更新する
+
+    【パラメータ】
+    - current_admin (User) : 管理者検証結果 (必須)
+    - db (Session) : データベース (必須)
+    - loan_request_id (int) : 貸出申請（内部ID） (必須)
+
+    【戻り値】
+    - loan_request_response (LoanRequestResponse) : 貸出申請レスポンス
+
+    【例外処理】
+    - HTTPException(404) : 対象貸出申請が取得できない場合
+    - HTTPException(409) : 対象貸出申請の状態が「承認済み」でない場合
+    - HTTPException(409) : 対象貸出申請の開始日が今日より後の場合
+    - HTTPException(409) : 対象備品が無効化されている場合
+    - HTTPException(409) : 同一備品について、貸出中の別申請が存在する場合
+
+    【処理フロー】
+    1. 現在日時取得
+    2. 対象貸出申請情報取得
+    3. 状態確認
+    4. 開始日確認
+    5. 対象備品確認
+    6. 貸出申請期間重複確認
+    7. 貸出処理
+    8. レスポンスへの変換
+    9. 戻り値を返却
+    """
+
+    # 1. 現在日時取得
+    now = dt.datetime.now(dt.UTC)
+    today = now.date()
+
+    # 2. 対象貸出申請情報取得
+    target_loan_request = crud.get_loan_request_by_id(db, loan_request_id)
+
+    # 2.(2) 例外処理：取得結果がNone
+    if target_loan_request is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="指定された貸出申請が見つかりません。",
+        )
+
+    # 3. 状態確認
+    # 3.(1) 例外処理：状態が「承認済み」でない
+    if target_loan_request.status != "承認済み":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="この申請は現在の状態では貸出処理できません。",
+        )
+
+    # 4. 開始日確認
+    # 4.(1) 例外処理：開始日が今日より後
+    if target_loan_request.start_date > today:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="開始日前のため、この申請は貸出処理できません。",
+        )
+
+    # 5. 対象備品確認
+    target_equipment = crud.get_equipment_by_id(db, target_loan_request.equipment_id)
+    # 5.(2) 例外処理：対象備品が無効化されている
+    if target_equipment is None or not target_equipment.active_flag:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="指定された備品は無効化されているため、貸出処理できません。",
+        )
+
+    # 6. 貸出申請期間重複確認
+    overlapping_count = crud.count_overlapping_loan_requests(
+        db,
+        target_loan_request.equipment_id,
+        target_loan_request.start_date,
+        target_loan_request.due_date,
+        loan_request_id,
+    )
+    # 6.(2) 例外処理：重複件数が1以上
+    if overlapping_count >= 1:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="同一備品について、貸出中の別申請が存在するため貸出処理できません。",
+        )
+
+    # 7. 貸出処理
+    lent_loan_request = crud.lend_loan_request(db, loan_request_id, current_admin.id, now)
+    assert lent_loan_request is not None
+
+    # 8. レスポンスへの変換
+    loan_request_response = LoanRequestResponse(
+        loan_request_id=lent_loan_request.id,
+        equipment_id=lent_loan_request.equipment_id,
+        start_date=lent_loan_request.start_date,
+        due_date=lent_loan_request.due_date,
+        purpose=lent_loan_request.purpose,
+        applicant_user_id=lent_loan_request.applicant_user_id,
+        status=lent_loan_request.status,
+        reject_cancel_reason=lent_loan_request.reject_cancel_reason,
+        approved_rejected_by_user_id=lent_loan_request.approved_rejected_by_user_id,
+        lent_by_user_id=lent_loan_request.lent_by_user_id,
+        returned_by_user_id=lent_loan_request.returned_by_user_id,
+        cancelled_by_user_id=lent_loan_request.cancelled_by_user_id,
+        requested_at=lent_loan_request.requested_at,
+        approved_rejected_at=lent_loan_request.approved_rejected_at,
+        lent_at=lent_loan_request.lent_at,
+        returned_at=lent_loan_request.returned_at,
+        cancelled_at=lent_loan_request.cancelled_at,
+        return_note=lent_loan_request.return_note,
+    )
+
+    # 9. 戻り値を返却
+    return loan_request_response
+
+
+# ====================================================================================================
+# 返却処理
+# - return_loan_request : 返却処理
+
+# 設計書：設計書/services/貸出・返却・履歴/返却処理_v0.2.0.md
+# ====================================================================================================
+
+
+def return_loan_request(
+    current_admin: User, db: Session, loan_request_id: int, return_note: str | None
+) -> LoanRequestResponse:
+    """
+    返却処理
+
+    設計書：設計書/services/貸出・返却・履歴/返却処理_v0.2.0.md
+
+    【処理概要】
+    - 管理者が、貸出中の貸出申請に対して返却処理を行う
+    - 状態を確認した上で返却済みに更新し、返却時状態メモを記録する
+
+    【パラメータ】
+    - current_admin (User) : 管理者検証結果 (必須)
+    - db (Session) : データベース (必須)
+    - loan_request_id (int) : 貸出申請（内部ID） (必須)
+    - return_note (str | None) : 返却時状態メモ (任意)
+
+    【戻り値】
+    - loan_request_response (LoanRequestResponse) : 貸出申請レスポンス
+
+    【例外処理】
+    - HTTPException(404) : 対象貸出申請が取得できない場合
+    - HTTPException(409) : 対象貸出申請の状態が「貸出中」でない場合
+
+    【処理フロー】
+    1. 現在日時取得
+    2. 対象貸出申請情報取得
+    3. 状態確認
+    4. 返却処理
+    5. レスポンスへの変換
+    6. 戻り値を返却
+    """
+
+    # 1. 現在日時取得
+    now = dt.datetime.now(dt.UTC)
+
+    # 2. 対象貸出申請情報取得
+    target_loan_request = crud.get_loan_request_by_id(db, loan_request_id)
+
+    # 2.(2) 例外処理：取得結果がNone
+    if target_loan_request is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="指定された貸出申請が見つかりません。",
+        )
+
+    # 3. 状態確認
+    # 3.(1) 例外処理：状態が「貸出中」でない
+    if target_loan_request.status != "貸出中":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="この申請は現在の状態では返却処理できません。",
+        )
+
+    # 4. 返却処理
+    returned_loan_request = crud.return_loan_request(db, loan_request_id, current_admin.id, return_note, now)
+    assert returned_loan_request is not None
+
+    # 5. レスポンスへの変換
+    loan_request_response = LoanRequestResponse(
+        loan_request_id=returned_loan_request.id,
+        equipment_id=returned_loan_request.equipment_id,
+        start_date=returned_loan_request.start_date,
+        due_date=returned_loan_request.due_date,
+        purpose=returned_loan_request.purpose,
+        applicant_user_id=returned_loan_request.applicant_user_id,
+        status=returned_loan_request.status,
+        reject_cancel_reason=returned_loan_request.reject_cancel_reason,
+        approved_rejected_by_user_id=returned_loan_request.approved_rejected_by_user_id,
+        lent_by_user_id=returned_loan_request.lent_by_user_id,
+        returned_by_user_id=returned_loan_request.returned_by_user_id,
+        cancelled_by_user_id=returned_loan_request.cancelled_by_user_id,
+        requested_at=returned_loan_request.requested_at,
+        approved_rejected_at=returned_loan_request.approved_rejected_at,
+        lent_at=returned_loan_request.lent_at,
+        returned_at=returned_loan_request.returned_at,
+        cancelled_at=returned_loan_request.cancelled_at,
+        return_note=returned_loan_request.return_note,
+    )
+
+    # 6. 戻り値を返却
+    return loan_request_response
+
+
+def _sanitize_csv_cell(value: str) -> str:
+    """CSVの数式インジェクション対策として、先頭が特定の記号のセルにシングルクォートを付与する"""
+
+    if value.startswith(("=", "+", "-", "@")):
+        return f"'{value}"
+    return value
+
+
+# ====================================================================================================
+# 貸出履歴CSV出力
+# - export_loan_requests_csv : 貸出履歴CSV出力
+
+# 設計書：設計書/services/貸出・返却・履歴/貸出履歴CSV出力_v0.2.0.md
+# ====================================================================================================
+
+
+def export_loan_requests_csv(
+    current_admin: User,
+    db: Session,
+    start_date_from: dt.date | None,
+    start_date_to: dt.date | None,
+    equipment_id: int | None,
+    applicant_user_id: int | None,
+) -> bytes:
+    """
+    貸出履歴CSV出力
+
+    設計書：設計書/services/貸出・返却・履歴/貸出履歴CSV出力_v0.2.0.md
+
+    【処理概要】
+    - 管理者が、条件（開始日範囲・備品・申請者）を指定して貸出申請の全履歴をCSV形式で出力する
+    - 数式インジェクション対策として、セルの先頭が「=」「+」「-」「@」のいずれかの場合はシングルクォートを付与する
+
+    【パラメータ】
+    - current_admin (User) : 管理者検証結果 (必須)
+    - db (Session) : データベース (必須)
+    - start_date_from (date | None) : 開始日下限（含む） (任意)
+    - start_date_to (date | None) : 開始日上限（含む） (任意)
+    - equipment_id (int | None) : 備品（内部ID） (任意)
+    - applicant_user_id (int | None) : 申請者（ユーザー内部ID） (任意)
+
+    【戻り値】
+    - csv_bytes (bytes) : UTF-8（BOM付き）でエンコードされたCSVデータ
+
+    【例外処理】
+    - なし
+
+    【処理フロー】
+    1. 対象貸出申請一覧取得
+    2. CSV組み立て
+    3. 戻り値を返却
+    """
+
+    # 1. 対象貸出申請一覧取得
+    target_loan_request_list = crud.search_loan_requests(
+        db, applicant_user_id, None, None, None, None, equipment_id, start_date_from, start_date_to
+    )
+
+    # 2. CSV組み立て
+    # 2.(1) ヘッダー行
+    header = [
+        "loan_request_id",
+        "equipment_id",
+        "applicant_user_id",
+        "start_date",
+        "due_date",
+        "purpose",
+        "status",
+        "reject_cancel_reason",
+        "approved_rejected_by_user_id",
+        "lent_by_user_id",
+        "returned_by_user_id",
+        "cancelled_by_user_id",
+        "requested_at",
+        "approved_rejected_at",
+        "lent_at",
+        "returned_at",
+        "cancelled_at",
+        "return_note",
+    ]
+    csv_line_list = [",".join(header)]
+    # 2.(2) データ行
+    for loan_request in target_loan_request_list:
+        row = [
+            str(loan_request.id),
+            str(loan_request.equipment_id),
+            str(loan_request.applicant_user_id),
+            str(loan_request.start_date),
+            str(loan_request.due_date),
+            loan_request.purpose,
+            loan_request.status,
+            loan_request.reject_cancel_reason or "",
+            str(loan_request.approved_rejected_by_user_id or ""),
+            str(loan_request.lent_by_user_id or ""),
+            str(loan_request.returned_by_user_id or ""),
+            str(loan_request.cancelled_by_user_id or ""),
+            str(loan_request.requested_at),
+            str(loan_request.approved_rejected_at or ""),
+            str(loan_request.lent_at or ""),
+            str(loan_request.returned_at or ""),
+            str(loan_request.cancelled_at or ""),
+            loan_request.return_note or "",
+        ]
+        sanitized_row = [_sanitize_csv_cell(cell) for cell in row]
+        csv_line_list.append(",".join(sanitized_row))
+    csv_text = "\n".join(csv_line_list)
+
+    # 3. 戻り値を返却
+    csv_bytes = csv_text.encode("utf-8-sig")
+    return csv_bytes
+
+
+# ====================================================================================================
+# 返却期限通知（前日・期限超過中）
+# - notify_due_date_tomorrow : 返却期限通知（前日）
+# - notify_due_date_overdue : 返却期限通知（期限超過中）
+
+# 設計書：
+# - 設計書/services/貸出・返却・履歴/返却期限通知（前日）_v0.2.0.md
+# - 設計書/services/貸出・返却・履歴/返却期限通知（期限超過中）_v0.2.0.md
+# ====================================================================================================
+
+
+def notify_due_date_tomorrow(db: Session) -> int:
+    """
+    返却期限通知（前日）
+
+    設計書：設計書/services/貸出・返却・履歴/返却期限通知（前日）_v0.2.0.md
+
+    【処理概要】
+    - 返却予定日が翌日の貸出中の貸出申請に対し、当日まだ通知していない場合に限り「返却期限」通知を生成する
+
+    【パラメータ】
+    - db (Session) : データベース (必須)
+
+    【戻り値】
+    - notified_count (int) : 通知生成件数
+
+    【例外処理】
+    - なし
+
+    【処理フロー】
+    1. 現在日時取得
+    2. 対象貸出申請一覧取得
+    3. 対象貸出申請への通知生成
+    4. 戻り値を返却
+    """
+
+    # 1. 現在日時取得
+    now = dt.datetime.now(dt.UTC)
+    today = now.date()
+    tomorrow = today + dt.timedelta(days=1)
+    today_start = dt.datetime.combine(today, dt.time.min, tzinfo=dt.UTC)
+    today_end = today_start + dt.timedelta(days=1)
+
+    # 2. 対象貸出申請一覧取得
+    target_loan_request_list = crud.search_loan_requests(db, None, "貸出中", None, None, tomorrow, None, None, None)
+
+    # 3. 対象貸出申請への通知生成
+    notified_count = 0
+    for target_loan_request in target_loan_request_list:
+        # 3.(1) 当日通知存在確認
+        already_notified = crud.exists_notification_today(
+            db, target_loan_request.id, "返却期限", today_start, today_end
+        )
+        # 3.(2) 当日未通知の場合のみ、「返却期限」通知を生成する
+        if not already_notified:
+            crud.create_notification(
+                db, target_loan_request.applicant_user_id, "返却期限", target_loan_request.id, now
+            )
+            notified_count += 1
+
+    # 4. 戻り値を返却
+    return notified_count
+
+
+def notify_due_date_overdue(db: Session) -> int:
+    """
+    返却期限通知（期限超過中）
+
+    設計書：設計書/services/貸出・返却・履歴/返却期限通知（期限超過中）_v0.2.0.md
+
+    【処理概要】
+    - 返却予定日を過ぎても貸出中のままの貸出申請に対し、当日まだ通知していない場合に限り「返却期限」通知を生成する
+
+    【パラメータ】
+    - db (Session) : データベース (必須)
+
+    【戻り値】
+    - notified_count (int) : 通知生成件数
+
+    【例外処理】
+    - なし
+
+    【処理フロー】
+    1. 現在日時取得
+    2. 対象貸出申請一覧取得
+    3. 対象貸出申請への通知生成
+    4. 戻り値を返却
+    """
+
+    # 1. 現在日時取得
+    now = dt.datetime.now(dt.UTC)
+    today = now.date()
+    today_start = dt.datetime.combine(today, dt.time.min, tzinfo=dt.UTC)
+    today_end = today_start + dt.timedelta(days=1)
+
+    # 2. 対象貸出申請一覧取得
+    target_loan_request_list = crud.search_loan_requests(db, None, "貸出中", None, today, None, None, None, None)
+
+    # 3. 対象貸出申請への通知生成
+    notified_count = 0
+    for target_loan_request in target_loan_request_list:
+        # 3.(1) 当日通知存在確認
+        already_notified = crud.exists_notification_today(
+            db, target_loan_request.id, "返却期限", today_start, today_end
+        )
+        # 3.(2) 当日未通知の場合のみ、「返却期限」通知を生成する
+        if not already_notified:
+            crud.create_notification(
+                db, target_loan_request.applicant_user_id, "返却期限", target_loan_request.id, now
+            )
+            notified_count += 1
+
+    # 4. 戻り値を返却
+    return notified_count

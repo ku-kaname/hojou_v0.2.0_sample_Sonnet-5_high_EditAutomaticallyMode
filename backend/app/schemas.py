@@ -341,6 +341,16 @@ class LoanRequestAdminCancelRequest(BaseModel):
     reason: str = Field(min_length=1, max_length=200)
 
 
+class LoanRequestReturnRequest(BaseModel):
+    """
+    返却処理リクエスト
+
+    設計書：設計書/スキーマ（schemas）/貸出申請操作_v0.3.0.md
+    """
+
+    return_note: str | None = Field(default=None, max_length=200)
+
+
 # ====================================================================================================
 # 通知操作
 # - NotificationResponse : 通知レスポンス
