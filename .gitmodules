@@ -1,0 +1,4 @@
+[submodule "hojou"]
+	path = hojou
+	url = https://github.com/ku-kaname/hojou.git
+	branch = dev
