@@ -5,12 +5,13 @@
 FastAPIアプリケーションの生成、CORS設定、ヘルスチェックエンドポイントを提供する
 """
 
+import datetime as dt
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Literal
 
-from fastapi import Depends, FastAPI, File, Query, UploadFile, status
+from fastapi import Depends, FastAPI, File, Query, Response, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
@@ -31,6 +32,7 @@ from app.schemas import (
     LoanRequestCreateRequest,
     LoanRequestRejectRequest,
     LoanRequestResponse,
+    LoanRequestReturnRequest,
     NotificationResponse,
     PasswordChangeRequest,
     PasswordResetRequest,
@@ -1412,3 +1414,149 @@ def mark_notification_as_read_endpoint(
 
     # 2. 戻り値を返却
     return notification_response
+
+
+# ====================================================================================================
+# 貸出処理・返却処理
+# - lend_loan_request_endpoint : 貸出処理
+# - return_loan_request_endpoint : 返却処理
+
+# 設計書：
+# - 設計書/main/貸出・返却・履歴/貸出処理_v0.2.0.md
+# - 設計書/main/貸出・返却・履歴/返却処理_v0.2.0.md
+# ====================================================================================================
+
+
+@app.patch("/loan-requests/{loan_request_id}/lend")
+def lend_loan_request_endpoint(
+    loan_request_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(auth.require_password_changed),
+    current_admin: User = Depends(auth.require_admin),
+) -> LoanRequestResponse:
+    """
+    貸出処理
+
+    設計書：設計書/main/貸出・返却・履歴/貸出処理_v0.2.0.md
+
+    【処理概要】
+    - 管理者が、承認済みの貸出申請に対して貸出処理を行う
+
+    【パラメータ】
+    - loan_request_id (int) : 貸出申請ID (必須)
+    - db (Session) : データベース (必須)
+
+    【戻り値】
+    - loan_request_response (LoanRequestResponse) : 貸出申請レスポンス
+
+    【例外処理】
+    - なし（オーケストレーション層の例外処理に従う）
+
+    【処理フロー】
+    1. 貸出処理の呼び出し
+    2. 戻り値を返却
+    """
+
+    # 1. 貸出処理の呼び出し
+    loan_request_response = services.lend_loan_request(current_admin, db, loan_request_id)
+
+    # 2. 戻り値を返却
+    return loan_request_response
+
+
+@app.patch("/loan-requests/{loan_request_id}/return")
+def return_loan_request_endpoint(
+    loan_request_id: int,
+    loan_request_return_request: LoanRequestReturnRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(auth.require_password_changed),
+    current_admin: User = Depends(auth.require_admin),
+) -> LoanRequestResponse:
+    """
+    返却処理
+
+    設計書：設計書/main/貸出・返却・履歴/返却処理_v0.2.0.md
+
+    【処理概要】
+    - 管理者が、貸出中の貸出申請に対して返却処理を行う
+
+    【パラメータ】
+    - loan_request_id (int) : 貸出申請ID (必須)
+    - loan_request_return_request (LoanRequestReturnRequest) : 返却処理リクエスト (必須)
+    - db (Session) : データベース (必須)
+
+    【戻り値】
+    - loan_request_response (LoanRequestResponse) : 貸出申請レスポンス
+
+    【例外処理】
+    - なし（オーケストレーション層の例外処理に従う）
+
+    【処理フロー】
+    1. 返却処理の呼び出し
+    2. 戻り値を返却
+    """
+
+    # 1. 返却処理の呼び出し
+    loan_request_response = services.return_loan_request(
+        current_admin, db, loan_request_id, loan_request_return_request.return_note
+    )
+
+    # 2. 戻り値を返却
+    return loan_request_response
+
+
+# ====================================================================================================
+# 貸出履歴CSV出力
+# - export_loan_requests_csv_endpoint : 貸出履歴CSV出力
+
+# 設計書：設計書/main/貸出・返却・履歴/貸出履歴CSV出力_v0.2.0.md
+# ====================================================================================================
+
+
+@app.get("/loan-requests/export")
+def export_loan_requests_csv_endpoint(
+    start_date_from: dt.date | None = Query(default=None),
+    start_date_to: dt.date | None = Query(default=None),
+    equipment_id: int | None = Query(default=None),
+    applicant_user_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(auth.require_password_changed),
+    current_admin: User = Depends(auth.require_admin),
+) -> Response:
+    """
+    貸出履歴CSV出力
+
+    設計書：設計書/main/貸出・返却・履歴/貸出履歴CSV出力_v0.2.0.md
+
+    【処理概要】
+    - 管理者が、条件を指定して貸出申請の全履歴をCSV形式で出力する
+
+    【パラメータ】
+    - start_date_from (date | None) : 開始日下限（含む） (任意)
+    - start_date_to (date | None) : 開始日上限（含む） (任意)
+    - equipment_id (int | None) : 備品ID (任意)
+    - applicant_user_id (int | None) : 申請者ID (任意)
+    - db (Session) : データベース (必須)
+
+    【戻り値】
+    - response (Response) : CSV形式（UTF-8、BOM付き）のレスポンス
+
+    【例外処理】
+    - なし（オーケストレーション層の例外処理に従う）
+
+    【処理フロー】
+    1. 貸出履歴CSV出力処理の呼び出し
+    2. 戻り値を返却
+    """
+
+    # 1. 貸出履歴CSV出力処理の呼び出し
+    csv_bytes = services.export_loan_requests_csv(
+        current_admin, db, start_date_from, start_date_to, equipment_id, applicant_user_id
+    )
+
+    # 2. 戻り値を返却
+    return Response(
+        content=csv_bytes,
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="loan_requests_export.csv"'},
+    )
