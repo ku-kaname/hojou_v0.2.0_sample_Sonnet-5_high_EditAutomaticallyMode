@@ -23,3 +23,53 @@ export interface TokenResponse {
   token_type: string;
   password_change_required: boolean;
 }
+
+export type LoanStatus = "貸出可" | "貸出中";
+
+export type ReservationStatus = "承認済み" | "貸出中";
+
+export interface EquipmentResponse {
+  equipment_id: number;
+  asset_number: string;
+  name: string;
+  category: string;
+  description: string;
+  location: string;
+  active_flag: boolean;
+  loan_status: LoanStatus;
+  due_date: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EquipmentCreateRequest {
+  asset_number: string;
+  name: string;
+  category: string;
+  description: string;
+  location: string;
+}
+
+export type EquipmentUpdateRequest = EquipmentCreateRequest;
+
+export interface ReservationResponse {
+  loan_request_id: number;
+  start_date: string;
+  due_date: string;
+  status: ReservationStatus;
+  applicant_name?: string | null;
+}
+
+export interface EquipmentBulkImportErrorDetail {
+  row_number: number | null;
+  message: string;
+}
+
+export interface EquipmentBulkImportErrorResponse {
+  error_list: EquipmentBulkImportErrorDetail[];
+}
+
+export interface EquipmentBulkImportResponse {
+  registered_count: number;
+  equipment_list: EquipmentResponse[];
+}
