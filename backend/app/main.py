@@ -8,6 +8,7 @@ FastAPIアプリケーションの生成、CORS設定、ヘルスチェックエ
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import Literal
 
 from fastapi import Depends, FastAPI, File, Query, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,6 +26,12 @@ from app.schemas import (
     EquipmentCreateRequest,
     EquipmentResponse,
     EquipmentUpdateRequest,
+    LoanRequestAdminCancelRequest,
+    LoanRequestCancelRequest,
+    LoanRequestCreateRequest,
+    LoanRequestRejectRequest,
+    LoanRequestResponse,
+    NotificationResponse,
     PasswordChangeRequest,
     PasswordResetRequest,
     ReservationResponse,
@@ -1005,3 +1012,403 @@ async def bulk_import_equipment_endpoint(
 
     # 3. 戻り値を返却
     return bulk_import_response
+
+
+# ====================================================================================================
+# 貸出申請登録・取消
+# - create_loan_request_endpoint : 貸出申請登録
+# - cancel_loan_request_endpoint : 貸出申請取消
+
+# 設計書：
+# - 設計書/main/貸出申請・承認/貸出申請登録_v0.2.0.md
+# - 設計書/main/貸出申請・承認/貸出申請取消_v0.2.0.md
+# ====================================================================================================
+
+
+@app.post("/loan-requests")
+def create_loan_request_endpoint(
+    loan_request_create_request: LoanRequestCreateRequest,
+    current_user: User = Depends(auth.require_password_changed),
+    db: Session = Depends(get_db),
+) -> LoanRequestResponse:
+    """
+    貸出申請登録
+
+    設計書：設計書/main/貸出申請・承認/貸出申請登録_v0.2.0.md
+
+    【処理概要】
+    - 利用者が、備品の貸出を申請する
+
+    【パラメータ】
+    - loan_request_create_request (LoanRequestCreateRequest) : 貸出申請登録リクエスト (必須)
+    - current_user (User) : ログインユーザー検証結果 (必須)
+    - db (Session) : データベース (必須)
+
+    【戻り値】
+    - loan_request_response (LoanRequestResponse) : 貸出申請レスポンス
+
+    【例外処理】
+    - なし（オーケストレーション層の例外処理に従う）
+
+    【処理フロー】
+    1. 貸出申請登録処理の呼び出し
+    2. 戻り値を返却
+    """
+
+    # 1. 貸出申請登録処理の呼び出し
+    loan_request_response = services.create_loan_request(
+        current_user,
+        db,
+        loan_request_create_request.equipment_id,
+        loan_request_create_request.start_date,
+        loan_request_create_request.due_date,
+        loan_request_create_request.purpose,
+    )
+
+    # 2. 戻り値を返却
+    return loan_request_response
+
+
+@app.patch("/loan-requests/{loan_request_id}/cancel")
+def cancel_loan_request_endpoint(
+    loan_request_id: int,
+    loan_request_cancel_request: LoanRequestCancelRequest,
+    current_user: User = Depends(auth.require_password_changed),
+    db: Session = Depends(get_db),
+) -> LoanRequestResponse:
+    """
+    貸出申請取消
+
+    設計書：設計書/main/貸出申請・承認/貸出申請取消_v0.2.0.md
+
+    【処理概要】
+    - 利用者が、自分が申請した貸出申請を取消す
+
+    【パラメータ】
+    - loan_request_id (int) : 貸出申請ID (必須)
+    - loan_request_cancel_request (LoanRequestCancelRequest) : 貸出申請取消リクエスト (必須)
+    - current_user (User) : ログインユーザー検証結果 (必須)
+    - db (Session) : データベース (必須)
+
+    【戻り値】
+    - loan_request_response (LoanRequestResponse) : 貸出申請レスポンス
+
+    【例外処理】
+    - なし（オーケストレーション層の例外処理に従う）
+
+    【処理フロー】
+    1. 貸出申請取消処理の呼び出し
+    2. 戻り値を返却
+    """
+
+    # 1. 貸出申請取消処理の呼び出し
+    loan_request_response = services.cancel_loan_request_by_applicant(
+        current_user, db, loan_request_id, loan_request_cancel_request.reason
+    )
+
+    # 2. 戻り値を返却
+    return loan_request_response
+
+
+# ====================================================================================================
+# 貸出申請一覧取得・詳細取得
+# - get_loan_requests_endpoint : 貸出申請一覧取得
+# - get_loan_request_endpoint : 貸出申請詳細取得
+
+# 設計書：
+# - 設計書/main/貸出申請・承認/貸出申請一覧取得_v0.3.0.md
+# - 設計書/main/貸出申請・承認/貸出申請詳細取得_v0.2.0.md
+# ====================================================================================================
+
+
+@app.get("/loan-requests")
+def get_loan_requests_endpoint(
+    scope: Literal["mine", "all", "overdue"] = Query(default="mine"),
+    status: str | None = Query(default=None),
+    current_user: User = Depends(auth.require_password_changed),
+    db: Session = Depends(get_db),
+) -> list[LoanRequestResponse]:
+    """
+    貸出申請一覧取得
+
+    設計書：設計書/main/貸出申請・承認/貸出申請一覧取得_v0.3.0.md
+
+    【処理概要】
+    - ログインユーザーが、貸出申請の一覧を確認する
+    - 管理者は、全申請一覧・期限超過一覧も確認できる
+
+    【パラメータ】
+    - scope (Literal["mine", "all", "overdue"]) : 取得範囲 (必須)
+    - status (str | None) : 状態 (任意)
+    - current_user (User) : ログインユーザー検証結果 (必須)
+    - db (Session) : データベース (必須)
+
+    【戻り値】
+    - loan_request_list (list[LoanRequestResponse]) : 貸出申請レスポンス一覧
+
+    【例外処理】
+    - なし（オーケストレーション層の例外処理に従う）
+
+    【処理フロー】
+    1. 貸出申請一覧取得処理の呼び出し
+    2. 戻り値を返却
+    """
+
+    # 1. 貸出申請一覧取得処理の呼び出し
+    loan_request_list = services.get_loan_requests(current_user, db, scope, status)
+
+    # 2. 戻り値を返却
+    return loan_request_list
+
+
+@app.get("/loan-requests/{loan_request_id}")
+def get_loan_request_endpoint(
+    loan_request_id: int,
+    current_user: User = Depends(auth.require_password_changed),
+    db: Session = Depends(get_db),
+) -> LoanRequestResponse:
+    """
+    貸出申請詳細取得
+
+    設計書：設計書/main/貸出申請・承認/貸出申請詳細取得_v0.2.0.md
+
+    【処理概要】
+    - ログインユーザーが、貸出申請の詳細を確認する
+    - 管理者は、任意の申請の詳細を確認できる
+
+    【パラメータ】
+    - loan_request_id (int) : 貸出申請ID (必須)
+    - current_user (User) : ログインユーザー検証結果 (必須)
+    - db (Session) : データベース (必須)
+
+    【戻り値】
+    - loan_request_response (LoanRequestResponse) : 貸出申請レスポンス
+
+    【例外処理】
+    - なし（オーケストレーション層の例外処理に従う）
+
+    【処理フロー】
+    1. 貸出申請詳細取得処理の呼び出し
+    2. 戻り値を返却
+    """
+
+    # 1. 貸出申請詳細取得処理の呼び出し
+    loan_request_response = services.get_loan_request(current_user, db, loan_request_id)
+
+    # 2. 戻り値を返却
+    return loan_request_response
+
+
+# ====================================================================================================
+# 貸出申請承認・却下・管理者取消
+# - approve_loan_request_endpoint : 貸出申請承認
+# - reject_loan_request_endpoint : 貸出申請却下
+# - admin_cancel_loan_request_endpoint : 貸出申請管理者取消
+
+# 設計書：
+# - 設計書/main/貸出申請・承認/貸出申請承認_v0.2.0.md
+# - 設計書/main/貸出申請・承認/貸出申請却下_v0.2.0.md
+# - 設計書/main/貸出申請・承認/貸出申請管理者取消_v0.2.0.md
+# ====================================================================================================
+
+
+@app.patch("/loan-requests/{loan_request_id}/approve")
+def approve_loan_request_endpoint(
+    loan_request_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(auth.require_password_changed),
+    current_admin: User = Depends(auth.require_admin),
+) -> LoanRequestResponse:
+    """
+    貸出申請承認
+
+    設計書：設計書/main/貸出申請・承認/貸出申請承認_v0.2.0.md
+
+    【処理概要】
+    - 管理者が、申請中の貸出申請を承認する
+
+    【パラメータ】
+    - loan_request_id (int) : 貸出申請ID (必須)
+    - db (Session) : データベース (必須)
+
+    【戻り値】
+    - loan_request_response (LoanRequestResponse) : 貸出申請レスポンス
+
+    【例外処理】
+    - なし（オーケストレーション層の例外処理に従う）
+
+    【処理フロー】
+    1. 貸出申請承認処理の呼び出し
+    2. 戻り値を返却
+    """
+
+    # 1. 貸出申請承認処理の呼び出し
+    loan_request_response = services.approve_loan_request(current_admin, db, loan_request_id)
+
+    # 2. 戻り値を返却
+    return loan_request_response
+
+
+@app.patch("/loan-requests/{loan_request_id}/reject")
+def reject_loan_request_endpoint(
+    loan_request_id: int,
+    loan_request_reject_request: LoanRequestRejectRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(auth.require_password_changed),
+    current_admin: User = Depends(auth.require_admin),
+) -> LoanRequestResponse:
+    """
+    貸出申請却下
+
+    設計書：設計書/main/貸出申請・承認/貸出申請却下_v0.2.0.md
+
+    【処理概要】
+    - 管理者が、申請中の貸出申請を却下する
+
+    【パラメータ】
+    - loan_request_id (int) : 貸出申請ID (必須)
+    - loan_request_reject_request (LoanRequestRejectRequest) : 貸出申請却下リクエスト (必須)
+    - db (Session) : データベース (必須)
+
+    【戻り値】
+    - loan_request_response (LoanRequestResponse) : 貸出申請レスポンス
+
+    【例外処理】
+    - なし（オーケストレーション層の例外処理に従う）
+
+    【処理フロー】
+    1. 貸出申請却下処理の呼び出し
+    2. 戻り値を返却
+    """
+
+    # 1. 貸出申請却下処理の呼び出し
+    loan_request_response = services.reject_loan_request(
+        current_admin, db, loan_request_id, loan_request_reject_request.reason
+    )
+
+    # 2. 戻り値を返却
+    return loan_request_response
+
+
+@app.patch("/loan-requests/{loan_request_id}/admin-cancel")
+def admin_cancel_loan_request_endpoint(
+    loan_request_id: int,
+    loan_request_admin_cancel_request: LoanRequestAdminCancelRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(auth.require_password_changed),
+    current_admin: User = Depends(auth.require_admin),
+) -> LoanRequestResponse:
+    """
+    貸出申請管理者取消
+
+    設計書：設計書/main/貸出申請・承認/貸出申請管理者取消_v0.2.0.md
+
+    【処理概要】
+    - 管理者が、承認済みの貸出申請を取消す
+
+    【パラメータ】
+    - loan_request_id (int) : 貸出申請ID (必須)
+    - loan_request_admin_cancel_request (LoanRequestAdminCancelRequest) : 貸出申請管理者取消リクエスト (必須)
+    - db (Session) : データベース (必須)
+
+    【戻り値】
+    - loan_request_response (LoanRequestResponse) : 貸出申請レスポンス
+
+    【例外処理】
+    - なし（オーケストレーション層の例外処理に従う）
+
+    【処理フロー】
+    1. 貸出申請管理者取消処理の呼び出し
+    2. 戻り値を返却
+    """
+
+    # 1. 貸出申請管理者取消処理の呼び出し
+    loan_request_response = services.admin_cancel_loan_request(
+        current_admin, db, loan_request_id, loan_request_admin_cancel_request.reason
+    )
+
+    # 2. 戻り値を返却
+    return loan_request_response
+
+
+# ====================================================================================================
+# 通知一覧取得・既読化
+# - get_notifications_endpoint : 通知一覧取得
+# - mark_notification_as_read_endpoint : 通知既読化
+
+# 設計書：
+# - 設計書/main/貸出申請・承認/通知一覧取得_v0.2.0.md
+# - 設計書/main/貸出申請・承認/通知既読化_v0.2.0.md
+# ====================================================================================================
+
+
+@app.get("/notifications")
+def get_notifications_endpoint(
+    current_user: User = Depends(auth.require_password_changed),
+    db: Session = Depends(get_db),
+) -> list[NotificationResponse]:
+    """
+    通知一覧取得
+
+    設計書：設計書/main/貸出申請・承認/通知一覧取得_v0.2.0.md
+
+    【処理概要】
+    - ログインユーザーが、自分宛の通知一覧を確認する
+
+    【パラメータ】
+    - current_user (User) : ログインユーザー検証結果 (必須)
+    - db (Session) : データベース (必須)
+
+    【戻り値】
+    - notification_list (list[NotificationResponse]) : 通知レスポンス一覧
+
+    【例外処理】
+    - なし（オーケストレーション層の例外処理に従う）
+
+    【処理フロー】
+    1. 通知一覧取得処理の呼び出し
+    2. 戻り値を返却
+    """
+
+    # 1. 通知一覧取得処理の呼び出し
+    notification_list = services.get_notifications(current_user, db)
+
+    # 2. 戻り値を返却
+    return notification_list
+
+
+@app.patch("/notifications/{notification_id}/read")
+def mark_notification_as_read_endpoint(
+    notification_id: int,
+    current_user: User = Depends(auth.require_password_changed),
+    db: Session = Depends(get_db),
+) -> NotificationResponse:
+    """
+    通知既読化
+
+    設計書：設計書/main/貸出申請・承認/通知既読化_v0.2.0.md
+
+    【処理概要】
+    - ログインユーザーが、自分宛の通知を既読にする
+
+    【パラメータ】
+    - notification_id (int) : 通知ID (必須)
+    - current_user (User) : ログインユーザー検証結果 (必須)
+    - db (Session) : データベース (必須)
+
+    【戻り値】
+    - notification_response (NotificationResponse) : 通知レスポンス
+
+    【例外処理】
+    - なし（オーケストレーション層の例外処理に従う）
+
+    【処理フロー】
+    1. 通知既読化処理の呼び出し
+    2. 戻り値を返却
+    """
+
+    # 1. 通知既読化処理の呼び出し
+    notification_response = services.mark_notification_as_read_by_recipient(current_user, db, notification_id)
+
+    # 2. 戻り値を返却
+    return notification_response

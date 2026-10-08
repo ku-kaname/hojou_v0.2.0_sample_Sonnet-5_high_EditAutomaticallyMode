@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
-from app.models import Equipment, LoanRequest, User
+from app.models import Equipment, LoanRequest, Notification, User
 
 # ====================================================================================================
 # ユーザー情報取得
@@ -1000,3 +1000,640 @@ def get_existing_asset_numbers(db: Session, asset_number_list: list[str]) -> lis
 
     # 2. 戻り値を返却
     return existing_asset_number_list
+
+
+# ====================================================================================================
+# 有効管理者ID一覧取得
+# - get_active_admin_user_id_list : 有効管理者ID一覧取得
+
+# 設計書：設計書/CRUD/貸出申請・承認/有効管理者ID一覧取得_v0.2.0.md
+# ====================================================================================================
+
+
+def get_active_admin_user_id_list(db: Session) -> list[int]:
+    """
+    有効管理者ID一覧取得
+
+    設計書：設計書/CRUD/貸出申請・承認/有効管理者ID一覧取得_v0.2.0.md
+
+    【処理概要】
+    - 権限が「管理者」かつ有効なユーザーの内部IDをUSERテーブルから取得する
+
+    【パラメータ】
+    - db (Session) : データベース (必須)
+
+    【戻り値】
+    - admin_user_id_list (list[int]) : ユーザー内部IDリスト（該当なしの場合は空リスト）
+
+    【例外処理】
+    - なし
+
+    【処理フロー】
+    1. 有効管理者ID一覧取得
+    2. 戻り値を返却
+    """
+
+    # 1. 有効管理者ID一覧取得
+    row_list = db.query(User.id).filter(User.role == "管理者", User.active_flag.is_(True)).all()
+    admin_user_id_list = [user_id for (user_id,) in row_list]
+
+    # 2. 戻り値を返却
+    return admin_user_id_list
+
+
+# ====================================================================================================
+# 貸出申請登録
+# - create_loan_request : 貸出申請登録
+
+# 設計書：設計書/CRUD/貸出申請・承認/貸出申請登録_v0.2.0.md
+# ====================================================================================================
+
+
+def create_loan_request(
+    db: Session,
+    equipment_id: int,
+    applicant_user_id: int,
+    start_date: dt.date,
+    due_date: dt.date,
+    purpose: str,
+    today: dt.datetime,
+) -> LoanRequest:
+    """
+    貸出申請登録
+
+    設計書：設計書/CRUD/貸出申請・承認/貸出申請登録_v0.2.0.md
+
+    【処理概要】
+    - 入力値をもとにLOAN_REQUESTテーブルへレコードを登録する。状態は"申請中"固定とし、申請日時に現在日時を設定する
+
+    【パラメータ】
+    - db (Session) : データベース (必須)
+    - equipment_id (int) : 備品（内部ID） (必須)
+    - applicant_user_id (int) : 申請者（ユーザー内部ID） (必須)
+    - start_date (date) : 開始日 (必須)
+    - due_date (date) : 返却予定日 (必須)
+    - purpose (str) : 用途 (必須)
+    - today (datetime) : 現在日時 (必須)
+
+    【戻り値】
+    - loan_request (LoanRequest) : 貸出申請情報
+
+    【例外処理】
+    - なし
+
+    【処理フロー】
+    1. 貸出申請情報登録
+    2. 戻り値を返却
+    """
+
+    # 1. 貸出申請情報登録
+    loan_request = LoanRequest(
+        equipment_id=equipment_id,
+        applicant_user_id=applicant_user_id,
+        start_date=start_date,
+        due_date=due_date,
+        purpose=purpose,
+        status="申請中",
+        requested_at=today,
+    )
+    db.add(loan_request)
+    db.flush()
+
+    # 2. 戻り値を返却
+    return loan_request
+
+
+# ====================================================================================================
+# 貸出申請取消
+# - cancel_loan_request : 貸出申請取消
+
+# 設計書：設計書/CRUD/貸出申請・承認/貸出申請取消_v0.2.0.md
+# ====================================================================================================
+
+
+def cancel_loan_request(
+    db: Session,
+    loan_request_id: int,
+    cancelled_by_user_id: int | None,
+    reason: str | None,
+    now: dt.datetime,
+) -> LoanRequest | None:
+    """
+    貸出申請取消
+
+    設計書：設計書/CRUD/貸出申請・承認/貸出申請取消_v0.2.0.md
+
+    【処理概要】
+    - 状態を"取消"に更新し、取消した者・取消日時・取消理由を記録する
+    - 申請者本人取消（F06）・管理者取消（F12）・ノーショー自動取消のいずれからも使用する汎用的な更新処理
+
+    【パラメータ】
+    - db (Session) : データベース (必須)
+    - loan_request_id (int) : 貸出申請（内部ID） (必須)
+    - cancelled_by_user_id (int | None) : 取消した者（ユーザー内部ID） (任意。自動取消の場合はNone)
+    - reason (str | None) : 取消理由 (任意)
+    - now (datetime) : 現在日時 (必須)
+
+    【戻り値】
+    - loan_request (LoanRequest | None) : 貸出申請情報（更新対象が存在しない場合はNone）
+
+    【例外処理】
+    - なし
+
+    【処理フロー】
+    1. 貸出申請情報更新
+    2. 戻り値を返却
+    """
+
+    # 1. 貸出申請情報更新
+    loan_request = db.get(LoanRequest, loan_request_id)
+    if loan_request is None:
+        return None
+    loan_request.status = "取消"
+    loan_request.cancelled_by_user_id = cancelled_by_user_id
+    loan_request.cancelled_at = now
+    loan_request.reject_cancel_reason = reason if reason is not None else ""
+    db.flush()
+
+    # 2. 戻り値を返却
+    return loan_request
+
+
+# ====================================================================================================
+# 貸出申請情報取得
+# - get_loan_request_by_id : 貸出申請情報取得
+
+# 設計書：設計書/CRUD/貸出申請・承認/貸出申請情報取得_v0.2.0.md
+# ====================================================================================================
+
+
+def get_loan_request_by_id(db: Session, loan_request_id: int) -> LoanRequest | None:
+    """
+    貸出申請情報取得
+
+    設計書：設計書/CRUD/貸出申請・承認/貸出申請情報取得_v0.2.0.md
+
+    【処理概要】
+    - 入力値の内部IDに一致する貸出申請情報をLOAN_REQUESTテーブルから取得する
+
+    【パラメータ】
+    - db (Session) : データベース (必須)
+    - loan_request_id (int) : 貸出申請（内部ID） (必須)
+
+    【戻り値】
+    - loan_request (LoanRequest | None) : 貸出申請情報（該当する貸出申請が無い場合はNone）
+
+    【例外処理】
+    - なし
+
+    【処理フロー】
+    1. 貸出申請情報取得
+    2. 戻り値を返却
+    """
+
+    # 1. 貸出申請情報取得
+    loan_request = db.get(LoanRequest, loan_request_id)
+
+    # 2. 戻り値を返却
+    return loan_request
+
+
+# ====================================================================================================
+# 貸出申請承認
+# - approve_loan_request : 貸出申請承認
+
+# 設計書：設計書/CRUD/貸出申請・承認/貸出申請承認_v0.2.0.md
+# ====================================================================================================
+
+
+def approve_loan_request(
+    db: Session,
+    loan_request_id: int,
+    approved_by_user_id: int,
+    now: dt.datetime,
+) -> LoanRequest | None:
+    """
+    貸出申請承認
+
+    設計書：設計書/CRUD/貸出申請・承認/貸出申請承認_v0.2.0.md
+
+    【処理概要】
+    - 状態を"承認済み"に更新し、承認・却下した管理者・承認却下日時を記録する
+
+    【パラメータ】
+    - db (Session) : データベース (必須)
+    - loan_request_id (int) : 貸出申請（内部ID） (必須)
+    - approved_by_user_id (int) : 承認した管理者（ユーザー内部ID） (必須)
+    - now (datetime) : 現在日時 (必須)
+
+    【戻り値】
+    - loan_request (LoanRequest | None) : 貸出申請情報（更新対象が存在しない場合はNone）
+
+    【例外処理】
+    - なし
+
+    【処理フロー】
+    1. 貸出申請情報更新
+    2. 戻り値を返却
+    """
+
+    # 1. 貸出申請情報更新
+    loan_request = db.get(LoanRequest, loan_request_id)
+    if loan_request is None:
+        return None
+    loan_request.status = "承認済み"
+    loan_request.approved_rejected_by_user_id = approved_by_user_id
+    loan_request.approved_rejected_at = now
+    db.flush()
+
+    # 2. 戻り値を返却
+    return loan_request
+
+
+# ====================================================================================================
+# 貸出申請却下
+# - reject_loan_request : 貸出申請却下
+
+# 設計書：設計書/CRUD/貸出申請・承認/貸出申請却下_v0.2.0.md
+# ====================================================================================================
+
+
+def reject_loan_request(
+    db: Session,
+    loan_request_id: int,
+    rejected_by_user_id: int,
+    reason: str,
+    now: dt.datetime,
+) -> LoanRequest | None:
+    """
+    貸出申請却下
+
+    設計書：設計書/CRUD/貸出申請・承認/貸出申請却下_v0.2.0.md
+
+    【処理概要】
+    - 状態を"却下"に更新し、却下した管理者・承認却下日時・却下理由を記録する
+
+    【パラメータ】
+    - db (Session) : データベース (必須)
+    - loan_request_id (int) : 貸出申請（内部ID） (必須)
+    - rejected_by_user_id (int) : 却下した管理者（ユーザー内部ID） (必須)
+    - reason (str) : 却下理由 (必須)
+    - now (datetime) : 現在日時 (必須)
+
+    【戻り値】
+    - loan_request (LoanRequest | None) : 貸出申請情報（更新対象が存在しない場合はNone）
+
+    【例外処理】
+    - なし
+
+    【処理フロー】
+    1. 貸出申請情報更新
+    2. 戻り値を返却
+    """
+
+    # 1. 貸出申請情報更新
+    loan_request = db.get(LoanRequest, loan_request_id)
+    if loan_request is None:
+        return None
+    loan_request.status = "却下"
+    loan_request.approved_rejected_by_user_id = rejected_by_user_id
+    loan_request.approved_rejected_at = now
+    loan_request.reject_cancel_reason = reason
+    db.flush()
+
+    # 2. 戻り値を返却
+    return loan_request
+
+
+# ====================================================================================================
+# 貸出申請期間重複件数取得
+# - count_overlapping_loan_requests : 貸出申請期間重複件数取得
+
+# 設計書：設計書/CRUD/貸出申請・承認/貸出申請期間重複件数取得_v0.2.0.md
+# ====================================================================================================
+
+
+def count_overlapping_loan_requests(
+    db: Session,
+    equipment_id: int,
+    start_date: dt.date,
+    due_date: dt.date,
+    exclude_loan_request_id: int | None,
+) -> int:
+    """
+    貸出申請期間重複件数取得
+
+    設計書：設計書/CRUD/貸出申請・承認/貸出申請期間重複件数取得_v0.2.0.md
+
+    【処理概要】
+    - 指定した備品について、状態が「承認済み」「貸出中」かつ指定した期間と重複する
+      （両端を含む日単位）貸出申請の件数を取得する
+    - 除外対象の貸出申請（内部ID）が指定されている場合、その貸出申請自身は件数に含めない
+
+    【パラメータ】
+    - db (Session) : データベース (必須)
+    - equipment_id (int) : 備品（内部ID） (必須)
+    - start_date (date) : 開始日 (必須)
+    - due_date (date) : 返却予定日 (必須)
+    - exclude_loan_request_id (int | None) : 除外する貸出申請（内部ID） (任意)
+
+    【戻り値】
+    - overlapping_count (int) : 重複件数（重複する申請が無い場合は0）
+
+    【例外処理】
+    - なし
+
+    【処理フロー】
+    1. 貸出申請期間重複件数取得
+    2. 戻り値を返却
+    """
+
+    # 1. 貸出申請期間重複件数取得
+    query = db.query(func.count(LoanRequest.id)).filter(
+        LoanRequest.equipment_id == equipment_id,
+        LoanRequest.status.in_(["承認済み", "貸出中"]),
+        LoanRequest.start_date <= due_date,
+        LoanRequest.due_date >= start_date,
+    )
+    if exclude_loan_request_id is not None:
+        query = query.filter(LoanRequest.id != exclude_loan_request_id)
+    overlapping_count = query.scalar()
+
+    # 2. 戻り値を返却
+    return overlapping_count
+
+
+# ====================================================================================================
+# 貸出申請検索一覧取得
+# - search_loan_requests : 貸出申請検索一覧取得
+
+# 設計書：設計書/CRUD/貸出申請・承認/貸出申請検索一覧取得_v0.3.0.md
+# ====================================================================================================
+
+
+def search_loan_requests(
+    db: Session,
+    applicant_user_id: int | None,
+    status: str | None,
+    start_date_before: dt.date | None,
+    due_date_before: dt.date | None,
+    due_date_equals: dt.date | None,
+    equipment_id: int | None,
+    start_date_from: dt.date | None,
+    start_date_to: dt.date | None,
+) -> list[LoanRequest]:
+    """
+    貸出申請検索一覧取得
+
+    設計書：設計書/CRUD/貸出申請・承認/貸出申請検索一覧取得_v0.3.0.md
+
+    【処理概要】
+    - 申請者・状態・開始日上限・返却予定日上限・返却予定日一致・備品・開始日下限・開始日上限（含む）で
+      絞り込む。各絞り込み条件は、入力値が指定されていない場合は条件を適用しない
+    - 絞り込んだ結果を、申請日時の降順で返却する
+
+    【パラメータ】
+    - db (Session) : データベース (必須)
+    - applicant_user_id (int | None) : 申請者（ユーザー内部ID） (任意)
+    - status (str | None) : 状態 (任意)
+    - start_date_before (date | None) : 開始日上限（除く） (任意)
+    - due_date_before (date | None) : 返却予定日上限（除く） (任意)
+    - due_date_equals (date | None) : 返却予定日一致 (任意)
+    - equipment_id (int | None) : 備品（内部ID） (任意)
+    - start_date_from (date | None) : 開始日下限（含む） (任意)
+    - start_date_to (date | None) : 開始日上限（含む） (任意)
+
+    【戻り値】
+    - loan_request_list (list[LoanRequest]) : 貸出申請情報リスト（該当する貸出申請が無い場合は空のリスト）
+
+    【例外処理】
+    - なし
+
+    【処理フロー】
+    1. 貸出申請検索一覧取得
+    2. 戻り値を返却
+    """
+
+    # 1. 貸出申請検索一覧取得
+    query = db.query(LoanRequest)
+
+    # 1.(1) 申請者（ユーザー内部ID）で絞り込み
+    if applicant_user_id is not None:
+        query = query.filter(LoanRequest.applicant_user_id == applicant_user_id)
+
+    # 1.(2) 状態で絞り込み
+    if status is not None:
+        query = query.filter(LoanRequest.status == status)
+
+    # 1.(3) 開始日上限（除く）で絞り込み
+    if start_date_before is not None:
+        query = query.filter(LoanRequest.start_date < start_date_before)
+
+    # 1.(4) 返却予定日上限（除く）で絞り込み
+    if due_date_before is not None:
+        query = query.filter(LoanRequest.due_date < due_date_before)
+
+    # 1.(5) 返却予定日一致で絞り込み
+    if due_date_equals is not None:
+        query = query.filter(LoanRequest.due_date == due_date_equals)
+
+    # 1.(6) 備品（内部ID）で絞り込み
+    if equipment_id is not None:
+        query = query.filter(LoanRequest.equipment_id == equipment_id)
+
+    # 1.(7) 開始日下限（含む）で絞り込み
+    if start_date_from is not None:
+        query = query.filter(LoanRequest.start_date >= start_date_from)
+
+    # 1.(8) 開始日上限（含む）で絞り込み
+    if start_date_to is not None:
+        query = query.filter(LoanRequest.start_date <= start_date_to)
+
+    # 1.(9) 申請日時の降順で取得
+    loan_request_list = query.order_by(LoanRequest.requested_at.desc()).all()
+
+    # 2. 戻り値を返却
+    return loan_request_list
+
+
+# ====================================================================================================
+# 通知登録
+# - create_notification : 通知登録
+
+# 設計書：設計書/CRUD/貸出申請・承認/通知登録_v0.2.0.md
+# ====================================================================================================
+
+
+def create_notification(
+    db: Session,
+    recipient_user_id: int,
+    notification_type: str,
+    loan_request_id: int,
+    today: dt.datetime,
+) -> Notification:
+    """
+    通知登録
+
+    設計書：設計書/CRUD/貸出申請・承認/通知登録_v0.2.0.md
+
+    【処理概要】
+    - 入力値をもとにNOTIFICATIONテーブルへレコードを登録する。既読フラグは未読固定とする
+
+    【パラメータ】
+    - db (Session) : データベース (必須)
+    - recipient_user_id (int) : 宛先（ユーザー内部ID） (必須)
+    - notification_type (str) : 種別 (必須)
+    - loan_request_id (int) : 関連申請（内部ID） (必須)
+    - today (datetime) : 現在日時 (必須)
+
+    【戻り値】
+    - notification (Notification) : 通知情報
+
+    【例外処理】
+    - なし
+
+    【処理フロー】
+    1. 通知情報登録
+    2. 戻り値を返却
+    """
+
+    # 1. 通知情報登録
+    notification = Notification(
+        recipient_user_id=recipient_user_id,
+        notification_type=notification_type,
+        loan_request_id=loan_request_id,
+        read_flag=False,
+        created_at=today,
+    )
+    db.add(notification)
+    db.flush()
+
+    # 2. 戻り値を返却
+    return notification
+
+
+# ====================================================================================================
+# 通知一覧取得
+# - get_notifications_by_recipient : 通知一覧取得
+
+# 設計書：設計書/CRUD/貸出申請・承認/通知一覧取得_v0.2.0.md
+# ====================================================================================================
+
+
+def get_notifications_by_recipient(db: Session, recipient_user_id: int) -> list[Notification]:
+    """
+    通知一覧取得
+
+    設計書：設計書/CRUD/貸出申請・承認/通知一覧取得_v0.2.0.md
+
+    【処理概要】
+    - 指定した宛先（ユーザー内部ID）に一致するレコードをNOTIFICATIONテーブルから取得する
+    - 作成日時の降順で並び替えて返却する
+
+    【パラメータ】
+    - db (Session) : データベース (必須)
+    - recipient_user_id (int) : 宛先（ユーザー内部ID） (必須)
+
+    【戻り値】
+    - notification_list (list[Notification]) : 通知情報一覧（該当なしの場合は空リスト）
+
+    【例外処理】
+    - なし
+
+    【処理フロー】
+    1. 通知一覧取得
+    2. 戻り値を返却
+    """
+
+    # 1. 通知一覧取得
+    notification_list = (
+        db.query(Notification)
+        .filter(Notification.recipient_user_id == recipient_user_id)
+        .order_by(Notification.created_at.desc())
+        .all()
+    )
+
+    # 2. 戻り値を返却
+    return notification_list
+
+
+# ====================================================================================================
+# 通知情報取得
+# - get_notification_by_id : 通知情報取得
+
+# 設計書：設計書/CRUD/貸出申請・承認/通知情報取得_v0.2.0.md
+# ====================================================================================================
+
+
+def get_notification_by_id(db: Session, notification_id: int) -> Notification | None:
+    """
+    通知情報取得
+
+    設計書：設計書/CRUD/貸出申請・承認/通知情報取得_v0.2.0.md
+
+    【処理概要】
+    - 指定した通知（内部ID）に一致するレコードをNOTIFICATIONテーブルから取得する
+
+    【パラメータ】
+    - db (Session) : データベース (必須)
+    - notification_id (int) : 通知（内部ID） (必須)
+
+    【戻り値】
+    - notification (Notification | None) : 通知情報（該当なしの場合はNone）
+
+    【例外処理】
+    - なし
+
+    【処理フロー】
+    1. 通知情報取得
+    2. 戻り値を返却
+    """
+
+    # 1. 通知情報取得
+    notification = db.get(Notification, notification_id)
+
+    # 2. 戻り値を返却
+    return notification
+
+
+# ====================================================================================================
+# 通知既読化
+# - mark_notification_as_read : 通知既読化
+
+# 設計書：設計書/CRUD/貸出申請・承認/通知既読化_v0.2.0.md
+# ====================================================================================================
+
+
+def mark_notification_as_read(db: Session, notification_id: int) -> Notification | None:
+    """
+    通知既読化
+
+    設計書：設計書/CRUD/貸出申請・承認/通知既読化_v0.2.0.md
+
+    【処理概要】
+    - 指定した通知（内部ID）に一致するレコードの既読フラグを既読に更新する
+
+    【パラメータ】
+    - db (Session) : データベース (必須)
+    - notification_id (int) : 通知（内部ID） (必須)
+
+    【戻り値】
+    - notification (Notification | None) : 通知情報（更新対象が存在しない場合はNone）
+
+    【例外処理】
+    - なし
+
+    【処理フロー】
+    1. 通知情報更新
+    2. 戻り値を返却
+    """
+
+    # 1. 通知情報更新
+    notification = db.get(Notification, notification_id)
+    if notification is None:
+        return None
+    notification.read_flag = True
+    db.flush()
+
+    # 2. 戻り値を返却
+    return notification
