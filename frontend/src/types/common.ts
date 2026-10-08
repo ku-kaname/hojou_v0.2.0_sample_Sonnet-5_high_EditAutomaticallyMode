@@ -73,3 +73,53 @@ export interface EquipmentBulkImportResponse {
   registered_count: number;
   equipment_list: EquipmentResponse[];
 }
+
+export type LoanRequestStatus = "申請中" | "承認済み" | "貸出中" | "返却済み" | "却下" | "取消";
+
+export interface LoanRequestResponse {
+  loan_request_id: number;
+  equipment_id: number;
+  start_date: string;
+  due_date: string;
+  purpose: string;
+  applicant_user_id: number;
+  status: LoanRequestStatus;
+  reject_cancel_reason: string | null;
+  approved_rejected_by_user_id: number | null;
+  lent_by_user_id: number | null;
+  returned_by_user_id: number | null;
+  cancelled_by_user_id: number | null;
+  requested_at: string;
+  approved_rejected_at: string | null;
+  lent_at: string | null;
+  returned_at: string | null;
+  cancelled_at: string | null;
+  return_note: string | null;
+}
+
+export interface LoanRequestCreateRequest {
+  equipment_id: number;
+  start_date: string;
+  due_date: string;
+  purpose: string;
+}
+
+export interface LoanRequestCancelRequest {
+  reason?: string | null;
+}
+
+export interface LoanRequestRejectRequest {
+  reason: string;
+}
+
+export type LoanRequestAdminCancelRequest = LoanRequestRejectRequest;
+
+export type NotificationType = "承認" | "却下" | "取消" | "新規申請" | "返却期限";
+
+export interface NotificationResponse {
+  notification_id: number;
+  notification_type: NotificationType;
+  loan_request_id: number;
+  read_flag: boolean;
+  created_at: string;
+}

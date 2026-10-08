@@ -15,6 +15,9 @@ import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { EquipmentDetailPage } from "./pages/EquipmentDetailPage";
 import { EquipmentListPage } from "./pages/EquipmentListPage";
 import { EquipmentManagementPage } from "./pages/EquipmentManagementPage";
+import { HomePage } from "./pages/HomePage";
+import { LoanRequestManagePage } from "./pages/LoanRequestManagePage";
+import { LoanRequestMinePage } from "./pages/LoanRequestMinePage";
 import { LoginPage } from "./pages/LoginPage";
 import { UserManagementPage } from "./pages/UserManagementPage";
 
@@ -37,6 +40,16 @@ export function App() {
               <ProtectedRoute>
                 <Layout>
                   <ChangePasswordPage />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <HomePage />
                 </Layout>
               </ProtectedRoute>
             }
@@ -77,6 +90,26 @@ export function App() {
               <AdminRoute>
                 <Layout>
                   <EquipmentManagementPage />
+                </Layout>
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/loan-requests/mine"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <LoanRequestMinePage />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/loan-requests/manage"
+            element={
+              <AdminRoute>
+                <Layout>
+                  <LoanRequestManagePage />
                 </Layout>
               </AdminRoute>
             }
