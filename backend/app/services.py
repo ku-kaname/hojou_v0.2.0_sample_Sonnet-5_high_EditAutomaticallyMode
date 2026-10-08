@@ -7,6 +7,7 @@
 
 import datetime as dt
 import os
+import re
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -14,6 +15,11 @@ from sqlalchemy.orm import Session
 from app import auth, crud
 from app.models import User
 from app.schemas import (
+    EquipmentBulkImportErrorDetail,
+    EquipmentBulkImportErrorResponse,
+    EquipmentBulkImportResponse,
+    EquipmentResponse,
+    ReservationResponse,
     TokenResponse,
     UserCreateResponse,
     UserGetResponse,
@@ -813,3 +819,815 @@ def create_initial_admin(db: Session) -> None:
 
     # 6. 戻り値を返却（なし）
     return None
+
+
+def _derive_loan_status_and_due_date(
+    reservation_list: list[crud.ReservationResult],
+) -> tuple[str, dt.date | None]:
+    """
+    予約情報リストから、貸出状況・返却予定日を導出する（状態="貸出中"の要素は常に最大1件）
+    """
+
+    loaned_reservation = next(
+        (reservation for reservation in reservation_list if reservation.status == "貸出中"),
+        None,
+    )
+    if loaned_reservation is None:
+        return "貸出可", None
+    return "貸出中", loaned_reservation.due_date
+
+
+# ====================================================================================================
+# 備品検索・一覧取得
+# - search_equipment : 備品検索・一覧取得
+
+# 設計書：設計書/services/備品管理/備品検索一覧取得_v0.2.0.md
+# ====================================================================================================
+
+
+def search_equipment(
+    current_user: User,
+    db: Session,
+    category: str | None,
+    keyword: str | None,
+    loan_status: str | None,
+    include_inactive: bool,
+) -> list[EquipmentResponse]:
+    """
+    備品検索・一覧取得
+
+    設計書：設計書/services/備品管理/備品検索一覧取得_v0.2.0.md
+
+    【処理概要】
+    - 備品を分類・キーワード・貸出状況で検索し、各備品の現在の貸出状況とともに一覧で取得する
+    - 無効化済み備品は管理者のみ参照可能とする
+
+    【パラメータ】
+    - current_user (User) : ログインユーザー検証結果 (必須)
+    - db (Session) : データベース (必須)
+    - category (str | None) : 分類 (任意)
+    - keyword (str | None) : キーワード (任意)
+    - loan_status (str | None) : 貸出状況 (任意)
+    - include_inactive (bool) : 無効化済み備品を含める (必須)
+
+    【戻り値】
+    - equipment_list (list[EquipmentResponse]) : 備品レスポンス一覧
+
+    【例外処理】
+    - なし
+
+    【処理フロー】
+    1. 無効化済み備品を含める条件の決定
+    2. 備品検索・一覧取得
+    3. レスポンスへの変換
+    4. 戻り値を返却
+    """
+
+    # 1. 無効化済み備品を含める条件の決定
+    include_inactive_applied = include_inactive if current_user.role == "管理者" else False
+
+    # 2. 備品検索・一覧取得
+    equipment_search_result_list = crud.search_equipment(
+        db, category, keyword, loan_status, include_inactive_applied
+    )
+
+    # 3. レスポンスへの変換
+    equipment_list = [
+        EquipmentResponse(
+            equipment_id=equipment_search_result.id,
+            asset_number=equipment_search_result.asset_number,
+            name=equipment_search_result.name,
+            category=equipment_search_result.category,
+            description=equipment_search_result.description,
+            location=equipment_search_result.location,
+            active_flag=equipment_search_result.active_flag,
+            loan_status="貸出中" if equipment_search_result.due_date is not None else "貸出可",
+            due_date=equipment_search_result.due_date,
+            created_at=equipment_search_result.created_at,
+            updated_at=equipment_search_result.updated_at,
+        )
+        for equipment_search_result in equipment_search_result_list
+    ]
+
+    # 4. 戻り値を返却
+    return equipment_list
+
+
+# ====================================================================================================
+# 備品詳細取得
+# - get_equipment : 備品詳細取得
+
+# 設計書：設計書/services/備品管理/備品詳細取得_v0.2.0.md
+# ====================================================================================================
+
+
+def get_equipment(current_user: User, db: Session, equipment_id: int) -> EquipmentResponse:
+    """
+    備品詳細取得
+
+    設計書：設計書/services/備品管理/備品詳細取得_v0.2.0.md
+
+    【処理概要】
+    - 指定した備品の詳細情報（現在の貸出状況を含む）を取得する
+    - 無効化済み備品は管理者のみ参照可能とする
+
+    【パラメータ】
+    - current_user (User) : ログインユーザー検証結果 (必須)
+    - db (Session) : データベース (必須)
+    - equipment_id (int) : 備品ID (必須)
+
+    【戻り値】
+    - equipment_response (EquipmentResponse) : 備品レスポンス
+
+    【例外処理】
+    - HTTPException(404) : 対象備品が取得できない場合、または一般ユーザーが無効化済み備品を取得しようとした場合
+
+    【処理フロー】
+    1. 対象備品情報取得
+    2. 無効化済み備品へのアクセス制御
+    3. 貸出状況の判定
+    4. レスポンスへの変換
+    5. 戻り値を返却
+    """
+
+    not_found_exception = HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="指定された備品が見つかりません。",
+    )
+
+    # 1. 対象備品情報取得
+    target_equipment = crud.get_equipment_by_id(db, equipment_id)
+
+    # 1.(2) 例外処理：取得結果がNone
+    if target_equipment is None:
+        raise not_found_exception
+
+    # 2. 無効化済み備品へのアクセス制御
+    # 2.① 例外処理：一般ユーザーかつ無効化済み備品
+    if current_user.role != "管理者" and not target_equipment.active_flag:
+        raise not_found_exception
+
+    # 3. 貸出状況の判定
+    reservation_list = crud.get_reservations_by_equipment_id(db, equipment_id)
+    loan_status, due_date = _derive_loan_status_and_due_date(reservation_list)
+
+    # 4. レスポンスへの変換
+    equipment_response = EquipmentResponse(
+        equipment_id=target_equipment.id,
+        asset_number=target_equipment.asset_number,
+        name=target_equipment.name,
+        category=target_equipment.category,
+        description=target_equipment.description,
+        location=target_equipment.location,
+        active_flag=target_equipment.active_flag,
+        loan_status=loan_status,
+        due_date=due_date,
+        created_at=target_equipment.created_at,
+        updated_at=target_equipment.updated_at,
+    )
+
+    # 5. 戻り値を返却
+    return equipment_response
+
+
+# ====================================================================================================
+# 備品登録
+# - create_equipment : 備品登録
+
+# 設計書：設計書/services/備品管理/備品登録_v0.2.0.md
+# ====================================================================================================
+
+
+def create_equipment(
+    db: Session,
+    asset_number: str,
+    name: str,
+    category: str,
+    description: str,
+    location: str,
+) -> EquipmentResponse:
+    """
+    備品登録
+
+    設計書：設計書/services/備品管理/備品登録_v0.2.0.md
+
+    【処理概要】
+    - 資産番号の重複が無いことを確認した上で、新規備品を登録する
+
+    【パラメータ】
+    - db (Session) : データベース (必須)
+    - asset_number (str) : 資産番号 (必須)
+    - name (str) : 備品名 (必須)
+    - category (str) : 分類 (必須)
+    - description (str) : 説明 (任意)
+    - location (str) : 保管場所 (任意)
+
+    【戻り値】
+    - equipment_response (EquipmentResponse) : 備品レスポンス
+
+    【例外処理】
+    - HTTPException(409) : 資産番号が既存の備品と重複する場合
+
+    【処理フロー】
+    1. 現在日時取得
+    2. 資産番号重複チェック
+    3. 備品情報登録
+    4. レスポンスへの変換
+    5. 戻り値を返却
+    """
+
+    # 1. 現在日時取得
+    now = dt.datetime.now(dt.UTC)
+
+    # 2. 資産番号重複チェック
+    duplicate_equipment = crud.get_equipment_by_asset_number(db, asset_number)
+
+    # 2.(2) 例外処理：取得結果がNoneでない
+    if duplicate_equipment is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="この資産番号は既に使用されています。",
+        )
+
+    # 3. 備品情報登録
+    created_equipment = crud.create_equipment(db, asset_number, name, category, description, location, now)
+
+    # 4. レスポンスへの変換
+    equipment_response = EquipmentResponse(
+        equipment_id=created_equipment.id,
+        asset_number=created_equipment.asset_number,
+        name=created_equipment.name,
+        category=created_equipment.category,
+        description=created_equipment.description,
+        location=created_equipment.location,
+        active_flag=created_equipment.active_flag,
+        loan_status="貸出可",
+        due_date=None,
+        created_at=created_equipment.created_at,
+        updated_at=created_equipment.updated_at,
+    )
+
+    # 5. 戻り値を返却
+    return equipment_response
+
+
+# ====================================================================================================
+# 備品編集
+# - update_equipment : 備品編集
+
+# 設計書：設計書/services/備品管理/備品編集_v0.2.0.md
+# ====================================================================================================
+
+
+def update_equipment(
+    db: Session,
+    equipment_id: int,
+    asset_number: str,
+    name: str,
+    category: str,
+    description: str,
+    location: str,
+) -> EquipmentResponse:
+    """
+    備品編集
+
+    設計書：設計書/services/備品管理/備品編集_v0.2.0.md
+
+    【処理概要】
+    - 既存備品の資産番号・備品名・分類・説明・保管場所を変更する
+
+    【パラメータ】
+    - db (Session) : データベース (必須)
+    - equipment_id (int) : 備品ID (必須)
+    - asset_number (str) : 資産番号 (必須)
+    - name (str) : 備品名 (必須)
+    - category (str) : 分類 (必須)
+    - description (str) : 説明 (任意)
+    - location (str) : 保管場所 (任意)
+
+    【戻り値】
+    - equipment_response (EquipmentResponse) : 備品レスポンス
+
+    【例外処理】
+    - HTTPException(404) : 対象備品が取得できない場合
+    - HTTPException(409) : 変更後の資産番号が対象備品以外の既存備品と重複する場合
+
+    【処理フロー】
+    1. 現在日時取得
+    2. 対象備品情報取得
+    3. 資産番号重複チェック
+    4. 備品情報更新
+    5. 備品予約状況取得
+    6. 貸出状況・返却予定日の導出
+    7. レスポンスへの変換
+    8. 戻り値を返却
+    """
+
+    # 1. 現在日時取得
+    now = dt.datetime.now(dt.UTC)
+
+    # 2. 対象備品情報取得
+    target_equipment = crud.get_equipment_by_id(db, equipment_id)
+
+    # 2.(2) 例外処理：取得結果がNone
+    if target_equipment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="指定された備品が見つかりません。",
+        )
+
+    # 3. 資産番号重複チェック
+    # 3.① 資産番号に変更がある場合のみ重複確認を行う
+    if asset_number != target_equipment.asset_number:
+        duplicate_equipment = crud.get_equipment_by_asset_number(db, asset_number)
+
+        # 3.(3) 例外処理：取得結果がNoneでない
+        if duplicate_equipment is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="この資産番号は既に使用されています。",
+            )
+
+    # 4. 備品情報更新
+    updated_equipment = crud.update_equipment(
+        db, now, equipment_id, asset_number, name, category, description, location
+    )
+    assert updated_equipment is not None
+
+    # 5. 備品予約状況取得
+    reservation_list = crud.get_reservations_by_equipment_id(db, equipment_id)
+
+    # 6. 貸出状況・返却予定日の導出
+    loan_status, due_date = _derive_loan_status_and_due_date(reservation_list)
+
+    # 7. レスポンスへの変換
+    equipment_response = EquipmentResponse(
+        equipment_id=updated_equipment.id,
+        asset_number=updated_equipment.asset_number,
+        name=updated_equipment.name,
+        category=updated_equipment.category,
+        description=updated_equipment.description,
+        location=updated_equipment.location,
+        active_flag=updated_equipment.active_flag,
+        loan_status=loan_status,
+        due_date=due_date,
+        created_at=updated_equipment.created_at,
+        updated_at=updated_equipment.updated_at,
+    )
+
+    # 8. 戻り値を返却
+    return equipment_response
+
+
+# ====================================================================================================
+# 備品無効化・再有効化
+# - deactivate_equipment : 備品無効化
+# - activate_equipment : 備品再有効化
+
+# 設計書：
+# - 設計書/services/備品管理/備品無効化_v0.2.0.md
+# - 設計書/services/備品管理/備品再有効化_v0.2.0.md
+# ====================================================================================================
+
+
+def deactivate_equipment(db: Session, equipment_id: int) -> EquipmentResponse:
+    """
+    備品無効化
+
+    設計書：設計書/services/備品管理/備品無効化_v0.2.0.md
+
+    【処理概要】
+    - 既存備品を無効化する
+
+    【パラメータ】
+    - db (Session) : データベース (必須)
+    - equipment_id (int) : 備品ID (必須)
+
+    【戻り値】
+    - equipment_response (EquipmentResponse) : 備品レスポンス
+
+    【例外処理】
+    - HTTPException(404) : 対象備品が取得できない場合
+
+    【処理フロー】
+    1. 現在日時取得
+    2. 対象備品情報取得
+    3. 備品有効化状態更新
+    4. 備品予約状況取得
+    5. 貸出状況・返却予定日の導出
+    6. レスポンスへの変換
+    7. 戻り値を返却
+    """
+
+    # 1. 現在日時取得
+    now = dt.datetime.now(dt.UTC)
+
+    # 2. 対象備品情報取得
+    target_equipment = crud.get_equipment_by_id(db, equipment_id)
+
+    # 2.(2) 例外処理：取得結果がNone
+    if target_equipment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="指定された備品が見つかりません。",
+        )
+
+    # 3. 備品有効化状態更新
+    updated_equipment = crud.update_equipment_active_flag(db, now, equipment_id, False)
+    assert updated_equipment is not None
+
+    # 4. 備品予約状況取得
+    reservation_list = crud.get_reservations_by_equipment_id(db, equipment_id)
+
+    # 5. 貸出状況・返却予定日の導出
+    loan_status, due_date = _derive_loan_status_and_due_date(reservation_list)
+
+    # 6. レスポンスへの変換
+    equipment_response = EquipmentResponse(
+        equipment_id=updated_equipment.id,
+        asset_number=updated_equipment.asset_number,
+        name=updated_equipment.name,
+        category=updated_equipment.category,
+        description=updated_equipment.description,
+        location=updated_equipment.location,
+        active_flag=updated_equipment.active_flag,
+        loan_status=loan_status,
+        due_date=due_date,
+        created_at=updated_equipment.created_at,
+        updated_at=updated_equipment.updated_at,
+    )
+
+    # 7. 戻り値を返却
+    return equipment_response
+
+
+def activate_equipment(db: Session, equipment_id: int) -> EquipmentResponse:
+    """
+    備品再有効化
+
+    設計書：設計書/services/備品管理/備品再有効化_v0.2.0.md
+
+    【処理概要】
+    - 無効化済みの備品を再有効化する
+
+    【パラメータ】
+    - db (Session) : データベース (必須)
+    - equipment_id (int) : 備品ID (必須)
+
+    【戻り値】
+    - equipment_response (EquipmentResponse) : 備品レスポンス
+
+    【例外処理】
+    - HTTPException(404) : 対象備品が取得できない場合
+
+    【処理フロー】
+    1. 現在日時取得
+    2. 対象備品情報取得
+    3. 備品有効化状態更新
+    4. 備品予約状況取得
+    5. 貸出状況・返却予定日の導出
+    6. レスポンスへの変換
+    7. 戻り値を返却
+    """
+
+    # 1. 現在日時取得
+    now = dt.datetime.now(dt.UTC)
+
+    # 2. 対象備品情報取得
+    target_equipment = crud.get_equipment_by_id(db, equipment_id)
+
+    # 2.(2) 例外処理：取得結果がNone
+    if target_equipment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="指定された備品が見つかりません。",
+        )
+
+    # 3. 備品有効化状態更新
+    updated_equipment = crud.update_equipment_active_flag(db, now, equipment_id, True)
+    assert updated_equipment is not None
+
+    # 4. 備品予約状況取得
+    reservation_list = crud.get_reservations_by_equipment_id(db, equipment_id)
+
+    # 5. 貸出状況・返却予定日の導出
+    loan_status, due_date = _derive_loan_status_and_due_date(reservation_list)
+
+    # 6. レスポンスへの変換
+    equipment_response = EquipmentResponse(
+        equipment_id=updated_equipment.id,
+        asset_number=updated_equipment.asset_number,
+        name=updated_equipment.name,
+        category=updated_equipment.category,
+        description=updated_equipment.description,
+        location=updated_equipment.location,
+        active_flag=updated_equipment.active_flag,
+        loan_status=loan_status,
+        due_date=due_date,
+        created_at=updated_equipment.created_at,
+        updated_at=updated_equipment.updated_at,
+    )
+
+    # 7. 戻り値を返却
+    return equipment_response
+
+
+# ====================================================================================================
+# 備品予約状況確認
+# - get_equipment_reservations : 備品予約状況確認
+
+# 設計書：設計書/services/備品管理/備品予約状況確認_v0.2.0.md
+# ====================================================================================================
+
+
+def get_equipment_reservations(
+    current_user: User, db: Session, equipment_id: int
+) -> list[ReservationResponse]:
+    """
+    備品予約状況確認
+
+    設計書：設計書/services/備品管理/備品予約状況確認_v0.2.0.md
+
+    【処理概要】
+    - 指定した備品の承認済み・貸出中の予約期間を取得する
+    - 借用者氏名は管理者のみレスポンスに含める
+
+    【パラメータ】
+    - current_user (User) : ログインユーザー検証結果 (必須)
+    - db (Session) : データベース (必須)
+    - equipment_id (int) : 備品ID (必須)
+
+    【戻り値】
+    - reservation_list (list[ReservationResponse]) : 予約情報レスポンス一覧（該当する申請が無い場合は空のリスト）
+
+    【例外処理】
+    - HTTPException(404) : 対象備品が取得できない場合、または一般ユーザーが無効化済み備品の予約状況を
+      確認しようとした場合
+
+    【処理フロー】
+    1. 対象備品情報取得
+    2. 無効化済み備品へのアクセス制御
+    3. 備品予約状況取得
+    4. レスポンスへの変換
+    5. 戻り値を返却
+    """
+
+    not_found_exception = HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="指定された備品が見つかりません。",
+    )
+
+    # 1. 対象備品情報取得
+    target_equipment = crud.get_equipment_by_id(db, equipment_id)
+
+    # 1.(2) 例外処理：取得結果がNone
+    if target_equipment is None:
+        raise not_found_exception
+
+    # 2. 無効化済み備品へのアクセス制御
+    # 2.① 例外処理：一般ユーザーかつ無効化済み備品
+    if current_user.role != "管理者" and not target_equipment.active_flag:
+        raise not_found_exception
+
+    # 3. 備品予約状況取得
+    equipment_reservation_list = crud.get_reservations_by_equipment_id(db, equipment_id)
+
+    # 4. レスポンスへの変換
+    is_admin = current_user.role == "管理者"
+    reservation_list = [
+        ReservationResponse(
+            loan_request_id=equipment_reservation.id,
+            start_date=equipment_reservation.start_date,
+            due_date=equipment_reservation.due_date,
+            status=equipment_reservation.status,
+            applicant_name=equipment_reservation.applicant_name if is_admin else None,
+        )
+        for equipment_reservation in equipment_reservation_list
+    ]
+
+    # 5. 戻り値を返却
+    return reservation_list
+
+
+# ====================================================================================================
+# 備品CSV一括登録
+# - bulk_import_equipment : 備品CSV一括登録
+
+# 設計書：設計書/services/備品管理/備品CSV一括登録_v0.2.0.md
+# ====================================================================================================
+
+
+_EQUIPMENT_CSV_MAX_FILE_SIZE = 5 * 1024 * 1024
+_EQUIPMENT_CSV_MAX_ROW_COUNT = 1000
+_EQUIPMENT_CSV_COLUMN_COUNT = 5
+_EQUIPMENT_CSV_ASSET_NUMBER_PATTERN = re.compile(r"[A-Za-z0-9-]+")
+
+
+def bulk_import_equipment(db: Session, file_content: bytes) -> EquipmentBulkImportResponse:
+    """
+    備品CSV一括登録
+
+    設計書：設計書/services/備品管理/備品CSV一括登録_v0.2.0.md
+
+    【処理概要】
+    - CSVファイルから複数の備品を一括登録する
+    - ファイルサイズ・文字コード・ヘッダー行・データ行数・各行の項目・資産番号の重複を検証し、
+      1件でもエラーがあれば全件登録しない
+
+    【パラメータ】
+    - db (Session) : データベース (必須)
+    - file_content (bytes) : ファイル内容 (必須)
+
+    【戻り値】
+    - bulk_import_response (EquipmentBulkImportResponse) : 備品CSV一括登録レスポンス
+
+    【例外処理】
+    - HTTPException(400) : ファイルサイズが5MBを超える場合
+    - HTTPException(400) : 文字コードのデコードに失敗する場合
+    - HTTPException(400) : ヘッダー行の列数が5でない場合
+    - HTTPException(400) : データ行数が1,000を超える場合
+    - HTTPException(400) : 各データ行の項目検証・資産番号の重複チェックで1件以上のエラーがある場合
+
+    【処理フロー】
+    1. ファイルサイズ検証
+    2. 文字コードデコード
+    3. CSV解析
+    4. ヘッダー行の列構成検証
+    5. データ行数検証
+    6. 各データ行の項目検証
+    7. CSV内資産番号重複チェック
+    8. DB内資産番号重複チェック
+    9. エラー一覧の判定
+    10. 現在日時取得
+    11. 複数備品同時登録
+    12. レスポンスへの変換
+    13. 戻り値を返却
+    """
+
+    # 1. ファイルサイズ検証
+    # 1.① 例外処理：ファイルサイズが上限を超える
+    if len(file_content) > _EQUIPMENT_CSV_MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=EquipmentBulkImportErrorResponse(
+                error_list=[
+                    EquipmentBulkImportErrorDetail(
+                        row_number=None, message="ファイルサイズが上限（5MB）を超えています。"
+                    )
+                ]
+            ).model_dump(),
+        )
+
+    # 2. 文字コードデコード
+    # 2.(2) 例外処理：デコードに失敗する
+    try:
+        decoded_content = file_content.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=EquipmentBulkImportErrorResponse(
+                error_list=[
+                    EquipmentBulkImportErrorDetail(
+                        row_number=None, message="ファイルの文字コードが不正です。UTF-8で保存してください。"
+                    )
+                ]
+            ).model_dump(),
+        ) from exc
+
+    # 3. CSV解析
+    line_list = decoded_content.splitlines()
+    header_line = line_list[0] if line_list else ""
+    header_column_list = header_line.split(",")
+    data_line_list = line_list[1:]
+
+    # 4. ヘッダー行の列構成検証
+    # 4.① 例外処理：ヘッダー行の列数が5でない
+    if len(header_column_list) != _EQUIPMENT_CSV_COLUMN_COUNT:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=EquipmentBulkImportErrorResponse(
+                error_list=[
+                    EquipmentBulkImportErrorDetail(
+                        row_number=None,
+                        message="ヘッダー行の列構成が不正です。列は資産番号・備品名・分類・説明・保管場所の順にしてください。",
+                    )
+                ]
+            ).model_dump(),
+        )
+
+    # 5. データ行数検証
+    # 5.① 例外処理：データ行の件数が1,000を超える
+    if len(data_line_list) > _EQUIPMENT_CSV_MAX_ROW_COUNT:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=EquipmentBulkImportErrorResponse(
+                error_list=[
+                    EquipmentBulkImportErrorDetail(
+                        row_number=None, message="データ行数が上限（1,000行）を超えています。"
+                    )
+                ]
+            ).model_dump(),
+        )
+
+    # 6. 各データ行の項目検証
+    error_list: list[EquipmentBulkImportErrorDetail] = []
+    asset_number_valid_row_list: list[tuple[int, str, str, str, str, str]] = []
+    for row_number, data_line in enumerate(data_line_list, start=1):
+        column_list = data_line.split(",")
+
+        # 6.① 列数が5でない行は、以降（7.・8.）の検証を行わない
+        if len(column_list) != _EQUIPMENT_CSV_COLUMN_COUNT:
+            error_list.append(EquipmentBulkImportErrorDetail(row_number=row_number, message="列数が不正です。"))
+            continue
+
+        asset_number, name, category, description, location = column_list
+
+        is_asset_number_valid = 1 <= len(asset_number) <= 32 and bool(
+            _EQUIPMENT_CSV_ASSET_NUMBER_PATTERN.fullmatch(asset_number)
+        )
+        if not is_asset_number_valid:
+            error_list.append(EquipmentBulkImportErrorDetail(row_number=row_number, message="資産番号が不正です。"))
+        if not 1 <= len(name) <= 100:
+            error_list.append(EquipmentBulkImportErrorDetail(row_number=row_number, message="備品名が不正です。"))
+        if not 1 <= len(category) <= 50:
+            error_list.append(EquipmentBulkImportErrorDetail(row_number=row_number, message="分類が不正です。"))
+        if len(description) > 500:
+            error_list.append(EquipmentBulkImportErrorDetail(row_number=row_number, message="説明が不正です。"))
+        if len(location) > 100:
+            error_list.append(EquipmentBulkImportErrorDetail(row_number=row_number, message="保管場所が不正です。"))
+
+        if is_asset_number_valid:
+            asset_number_valid_row_list.append((row_number, asset_number, name, category, description, location))
+
+    # 7. CSV内資産番号重複チェック
+    asset_number_to_row_number_list: dict[str, list[int]] = {}
+    for row_number, asset_number, *_rest in asset_number_valid_row_list:
+        asset_number_to_row_number_list.setdefault(asset_number, []).append(row_number)
+    for duplicated_row_number_list in asset_number_to_row_number_list.values():
+        for duplicated_row_number in duplicated_row_number_list[1:]:
+            error_list.append(
+                EquipmentBulkImportErrorDetail(row_number=duplicated_row_number, message="資産番号が重複しています。")
+            )
+
+    # 8. DB内資産番号重複チェック
+    asset_number_list_to_check = [asset_number for _row_number, asset_number, *_rest in asset_number_valid_row_list]
+    existing_asset_number_set = set(crud.get_existing_asset_numbers(db, asset_number_list_to_check))
+    for row_number, asset_number, *_rest in asset_number_valid_row_list:
+        if asset_number in existing_asset_number_set:
+            error_list.append(
+                EquipmentBulkImportErrorDetail(row_number=row_number, message="この資産番号は既に使用されています。")
+            )
+
+    # 9. エラー一覧の判定
+    # 9.① 例外処理：エラー一覧の件数が1件以上
+    if error_list:
+
+        def _error_sort_key(error: EquipmentBulkImportErrorDetail) -> int:
+            return error.row_number if error.row_number is not None else 0
+
+        sorted_error_list = sorted(error_list, key=_error_sort_key)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=EquipmentBulkImportErrorResponse(error_list=sorted_error_list).model_dump(),
+        )
+
+    # 10. 現在日時取得
+    now = dt.datetime.now(dt.UTC)
+
+    # 11. 複数備品同時登録
+    equipment_create_list = [
+        crud.EquipmentCreateItem(
+            asset_number=asset_number,
+            name=name,
+            category=category,
+            description=description,
+            location=location,
+        )
+        for _row_number, asset_number, name, category, description, location in asset_number_valid_row_list
+    ]
+    created_equipment_list = crud.bulk_create_equipment(db, now, equipment_create_list)
+
+    # 12. レスポンスへの変換
+    equipment_list = [
+        EquipmentResponse(
+            equipment_id=created_equipment.id,
+            asset_number=created_equipment.asset_number,
+            name=created_equipment.name,
+            category=created_equipment.category,
+            description=created_equipment.description,
+            location=created_equipment.location,
+            active_flag=created_equipment.active_flag,
+            loan_status="貸出可",
+            due_date=None,
+            created_at=created_equipment.created_at,
+            updated_at=created_equipment.updated_at,
+        )
+        for created_equipment in created_equipment_list
+    ]
+    bulk_import_response = EquipmentBulkImportResponse(
+        registered_count=len(created_equipment_list),
+        equipment_list=equipment_list,
+    )
+
+    # 13. 戻り値を返却
+    return bulk_import_response

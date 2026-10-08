@@ -9,7 +9,7 @@ import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, status
+from fastapi import Depends, FastAPI, File, Query, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
@@ -21,8 +21,13 @@ from app.database import SessionLocal, engine, get_db
 from app.models import User
 from app.scheduler import shutdown_scheduler, start_scheduler
 from app.schemas import (
+    EquipmentBulkImportResponse,
+    EquipmentCreateRequest,
+    EquipmentResponse,
+    EquipmentUpdateRequest,
     PasswordChangeRequest,
     PasswordResetRequest,
+    ReservationResponse,
     TokenResponse,
     UserCreateRequest,
     UserCreateResponse,
@@ -626,3 +631,377 @@ def get_user_endpoint(
 
     # 2. 戻り値を返却
     return user_response
+
+
+# ====================================================================================================
+# 備品検索・一覧取得・詳細取得
+# - search_equipment_endpoint : 備品検索・一覧取得
+# - get_equipment_endpoint : 備品詳細取得
+
+# 設計書：
+# - 設計書/main/備品管理/備品検索一覧取得_v0.2.0.md
+# - 設計書/main/備品管理/備品詳細取得_v0.2.0.md
+# ====================================================================================================
+
+
+@app.get("/equipment")
+def search_equipment_endpoint(
+    category: str | None = Query(default=None),
+    keyword: str | None = Query(default=None),
+    loan_status: str | None = Query(default=None),
+    include_inactive: bool = Query(default=False),
+    current_user: User = Depends(auth.require_password_changed),
+    db: Session = Depends(get_db),
+) -> list[EquipmentResponse]:
+    """
+    備品検索・一覧取得
+
+    設計書：設計書/main/備品管理/備品検索一覧取得_v0.2.0.md
+
+    【処理概要】
+    - 利用者が、分類・キーワード・貸出状況で備品を検索し、各備品の現在の貸出状況とともに一覧で確認する
+
+    【パラメータ】
+    - category (str | None) : 分類 (任意)
+    - keyword (str | None) : キーワード (任意)
+    - loan_status (str | None) : 貸出状況 (任意)
+    - include_inactive (bool) : 無効化済み備品を含める (必須)
+    - current_user (User) : ログインユーザー検証結果 (必須)
+    - db (Session) : データベース (必須)
+
+    【戻り値】
+    - equipment_list (list[EquipmentResponse]) : 備品レスポンス一覧
+
+    【例外処理】
+    - なし（オーケストレーション層の例外処理に従う）
+
+    【処理フロー】
+    1. 備品検索・一覧取得処理の呼び出し
+    2. 戻り値を返却
+    """
+
+    # 1. 備品検索・一覧取得処理の呼び出し
+    equipment_list = services.search_equipment(
+        current_user, db, category, keyword, loan_status, include_inactive
+    )
+
+    # 2. 戻り値を返却
+    return equipment_list
+
+
+@app.get("/equipment/{equipment_id}")
+def get_equipment_endpoint(
+    equipment_id: int,
+    current_user: User = Depends(auth.require_password_changed),
+    db: Session = Depends(get_db),
+) -> EquipmentResponse:
+    """
+    備品詳細取得
+
+    設計書：設計書/main/備品管理/備品詳細取得_v0.2.0.md
+
+    【処理概要】
+    - 利用者が、指定した備品の詳細情報（現在の貸出状況を含む）を確認する
+
+    【パラメータ】
+    - equipment_id (int) : 備品ID (必須)
+    - current_user (User) : ログインユーザー検証結果 (必須)
+    - db (Session) : データベース (必須)
+
+    【戻り値】
+    - equipment_response (EquipmentResponse) : 備品レスポンス
+
+    【例外処理】
+    - なし（オーケストレーション層の例外処理に従う）
+
+    【処理フロー】
+    1. 備品詳細取得処理の呼び出し
+    2. 戻り値を返却
+    """
+
+    # 1. 備品詳細取得処理の呼び出し
+    equipment_response = services.get_equipment(current_user, db, equipment_id)
+
+    # 2. 戻り値を返却
+    return equipment_response
+
+
+# ====================================================================================================
+# 備品登録・編集
+# - create_equipment_endpoint : 備品登録
+# - update_equipment_endpoint : 備品編集
+
+# 設計書：
+# - 設計書/main/備品管理/備品登録_v0.2.0.md
+# - 設計書/main/備品管理/備品編集_v0.2.0.md
+# ====================================================================================================
+
+
+@app.post("/equipment")
+def create_equipment_endpoint(
+    equipment_create_request: EquipmentCreateRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(auth.require_password_changed),
+    current_admin: User = Depends(auth.require_admin),
+) -> EquipmentResponse:
+    """
+    備品登録
+
+    設計書：設計書/main/備品管理/備品登録_v0.2.0.md
+
+    【処理概要】
+    - 管理者が、新規備品を登録する
+
+    【パラメータ】
+    - equipment_create_request (EquipmentCreateRequest) : 備品登録リクエスト (必須)
+    - db (Session) : データベース (必須)
+
+    【戻り値】
+    - equipment_response (EquipmentResponse) : 備品レスポンス
+
+    【例外処理】
+    - なし（オーケストレーション層の例外処理に従う）
+
+    【処理フロー】
+    1. 備品登録処理の呼び出し
+    2. 戻り値を返却
+    """
+
+    # 1. 備品登録処理の呼び出し
+    equipment_response = services.create_equipment(
+        db,
+        equipment_create_request.asset_number,
+        equipment_create_request.name,
+        equipment_create_request.category,
+        equipment_create_request.description,
+        equipment_create_request.location,
+    )
+
+    # 2. 戻り値を返却
+    return equipment_response
+
+
+@app.put("/equipment/{equipment_id}")
+def update_equipment_endpoint(
+    equipment_id: int,
+    equipment_update_request: EquipmentUpdateRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(auth.require_password_changed),
+    current_admin: User = Depends(auth.require_admin),
+) -> EquipmentResponse:
+    """
+    備品編集
+
+    設計書：設計書/main/備品管理/備品編集_v0.2.0.md
+
+    【処理概要】
+    - 管理者が、既存備品の資産番号・備品名・分類・説明・保管場所を変更する
+
+    【パラメータ】
+    - equipment_id (int) : 備品ID (必須)
+    - equipment_update_request (EquipmentUpdateRequest) : 備品編集リクエスト (必須)
+    - db (Session) : データベース (必須)
+
+    【戻り値】
+    - equipment_response (EquipmentResponse) : 備品レスポンス
+
+    【例外処理】
+    - なし（オーケストレーション層の例外処理に従う）
+
+    【処理フロー】
+    1. 備品編集処理の呼び出し
+    2. 戻り値を返却
+    """
+
+    # 1. 備品編集処理の呼び出し
+    equipment_response = services.update_equipment(
+        db,
+        equipment_id,
+        equipment_update_request.asset_number,
+        equipment_update_request.name,
+        equipment_update_request.category,
+        equipment_update_request.description,
+        equipment_update_request.location,
+    )
+
+    # 2. 戻り値を返却
+    return equipment_response
+
+
+# ====================================================================================================
+# 備品有効化状態変更
+# - deactivate_equipment_endpoint : 備品無効化
+# - activate_equipment_endpoint : 備品再有効化
+
+# 設計書：
+# - 設計書/main/備品管理/備品無効化_v0.2.0.md
+# - 設計書/main/備品管理/備品再有効化_v0.2.0.md
+# ====================================================================================================
+
+
+@app.patch("/equipment/{equipment_id}/deactivate")
+def deactivate_equipment_endpoint(
+    equipment_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(auth.require_password_changed),
+    current_admin: User = Depends(auth.require_admin),
+) -> EquipmentResponse:
+    """
+    備品無効化
+
+    設計書：設計書/main/備品管理/備品無効化_v0.2.0.md
+
+    【処理概要】
+    - 管理者が、既存備品を無効化する
+
+    【パラメータ】
+    - equipment_id (int) : 備品ID (必須)
+    - db (Session) : データベース (必須)
+
+    【戻り値】
+    - equipment_response (EquipmentResponse) : 備品レスポンス
+
+    【例外処理】
+    - なし（オーケストレーション層の例外処理に従う）
+
+    【処理フロー】
+    1. 備品無効化処理の呼び出し
+    2. 戻り値を返却
+    """
+
+    # 1. 備品無効化処理の呼び出し
+    equipment_response = services.deactivate_equipment(db, equipment_id)
+
+    # 2. 戻り値を返却
+    return equipment_response
+
+
+@app.patch("/equipment/{equipment_id}/activate")
+def activate_equipment_endpoint(
+    equipment_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(auth.require_password_changed),
+    current_admin: User = Depends(auth.require_admin),
+) -> EquipmentResponse:
+    """
+    備品再有効化
+
+    設計書：設計書/main/備品管理/備品再有効化_v0.2.0.md
+
+    【処理概要】
+    - 管理者が、無効化済みの備品を再有効化する
+
+    【パラメータ】
+    - equipment_id (int) : 備品ID (必須)
+    - db (Session) : データベース (必須)
+
+    【戻り値】
+    - equipment_response (EquipmentResponse) : 備品レスポンス
+
+    【例外処理】
+    - なし（オーケストレーション層の例外処理に従う）
+
+    【処理フロー】
+    1. 備品再有効化処理の呼び出し
+    2. 戻り値を返却
+    """
+
+    # 1. 備品再有効化処理の呼び出し
+    equipment_response = services.activate_equipment(db, equipment_id)
+
+    # 2. 戻り値を返却
+    return equipment_response
+
+
+# ====================================================================================================
+# 備品予約状況確認
+# - get_equipment_reservations_endpoint : 備品予約状況確認
+
+# 設計書：設計書/main/備品管理/備品予約状況確認_v0.2.0.md
+# ====================================================================================================
+
+
+@app.get("/equipment/{equipment_id}/reservations", response_model_exclude_none=True)
+def get_equipment_reservations_endpoint(
+    equipment_id: int,
+    current_user: User = Depends(auth.require_password_changed),
+    db: Session = Depends(get_db),
+) -> list[ReservationResponse]:
+    """
+    備品予約状況確認
+
+    設計書：設計書/main/備品管理/備品予約状況確認_v0.2.0.md
+
+    【処理概要】
+    - 利用者が、指定した備品の承認済み・貸出中の予約期間を確認し、空き期間を把握する
+
+    【パラメータ】
+    - equipment_id (int) : 備品ID (必須)
+    - current_user (User) : ログインユーザー検証結果 (必須)
+    - db (Session) : データベース (必須)
+
+    【戻り値】
+    - reservation_list (list[ReservationResponse]) : 予約情報レスポンス一覧
+
+    【例外処理】
+    - なし（オーケストレーション層の例外処理に従う）
+
+    【処理フロー】
+    1. 備品予約状況確認処理の呼び出し
+    2. 戻り値を返却
+    """
+
+    # 1. 備品予約状況確認処理の呼び出し
+    reservation_list = services.get_equipment_reservations(current_user, db, equipment_id)
+
+    # 2. 戻り値を返却
+    return reservation_list
+
+
+# ====================================================================================================
+# 備品CSV一括登録
+# - bulk_import_equipment_endpoint : 備品CSV一括登録
+
+# 設計書：設計書/main/備品管理/備品CSV一括登録_v0.2.0.md
+# ====================================================================================================
+
+
+@app.post("/equipment/bulk-import")
+async def bulk_import_equipment_endpoint(
+    file: UploadFile = File(),
+    db: Session = Depends(get_db),
+    _: User = Depends(auth.require_password_changed),
+    current_admin: User = Depends(auth.require_admin),
+) -> EquipmentBulkImportResponse:
+    """
+    備品CSV一括登録
+
+    設計書：設計書/main/備品管理/備品CSV一括登録_v0.2.0.md
+
+    【処理概要】
+    - 管理者が、CSVファイルから複数の備品を一括登録する
+
+    【パラメータ】
+    - file (UploadFile) : CSVファイル (必須)
+    - db (Session) : データベース (必須)
+
+    【戻り値】
+    - bulk_import_response (EquipmentBulkImportResponse) : 備品CSV一括登録レスポンス
+
+    【例外処理】
+    - HTTPException(400) : 備品CSV一括登録処理が検証エラーを検出した場合（オーケストレーション層の例外処理に従う）
+
+    【処理フロー】
+    1. ファイル内容読み込み
+    2. 備品CSV一括登録処理の呼び出し
+    3. 戻り値を返却
+    """
+
+    # 1. ファイル内容読み込み
+    file_content = await file.read()
+
+    # 2. 備品CSV一括登録処理の呼び出し
+    bulk_import_response = services.bulk_import_equipment(db, file_content)
+
+    # 3. 戻り値を返却
+    return bulk_import_response
