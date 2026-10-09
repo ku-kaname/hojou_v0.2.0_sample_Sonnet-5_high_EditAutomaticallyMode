@@ -2,11 +2,8 @@
  * 申請管理（管理者）画面
  *
  * 【概要】
- * 管理者が、全申請の一覧を確認し、申請中の承認・却下（F09）、承認済みの取消（F12）を行う画面
- *
- * 【備考】
- * 貸出処理・返却処理（F10・F11）は、別バックログ「実装（貸出・返却・履歴）」で本画面へ追加する予定であり、
- * 本画面では実装しない。
+ * 管理者が、全申請の一覧を確認し、申請中の承認・却下（F09）、承認済みの取消（F12）、
+ * 承認済みの貸出処理（F10）、貸出中の返却処理（F11）を行う画面
  */
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
@@ -18,6 +15,7 @@ import type {
   LoanRequestAdminCancelRequest,
   LoanRequestRejectRequest,
   LoanRequestResponse,
+  LoanRequestReturnRequest,
 } from "../types/common";
 
 function toErrorMessage(error: unknown, fallback: string): string {
@@ -37,7 +35,8 @@ const STATUS_FILTER_OPTIONS: { value: string; label: string }[] = [
 type Panel =
   | { type: "none" }
   | { type: "reject"; loanRequest: LoanRequestResponse }
-  | { type: "admin-cancel"; loanRequest: LoanRequestResponse };
+  | { type: "admin-cancel"; loanRequest: LoanRequestResponse }
+  | { type: "return"; loanRequest: LoanRequestResponse };
 
 /**
  * 申請一覧の備品情報取得
@@ -68,6 +67,7 @@ export function LoanRequestManagePage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [panel, setPanel] = useState<Panel>({ type: "none" });
   const [reasonInput, setReasonInput] = useState("");
+  const [returnNoteInput, setReturnNoteInput] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -99,6 +99,12 @@ export function LoanRequestManagePage() {
     setActionError(null);
   }
 
+  function openReturnPanel(loanRequest: LoanRequestResponse): void {
+    setPanel({ type: "return", loanRequest });
+    setReturnNoteInput("");
+    setActionError(null);
+  }
+
   function closePanel(): void {
     setPanel({ type: "none" });
   }
@@ -110,6 +116,16 @@ export function LoanRequestManagePage() {
       await loadLoanRequestList();
     } catch (error) {
       setActionError(toErrorMessage(error, "貸出申請の承認に失敗しました。"));
+    }
+  }
+
+  async function handleLend(loanRequestId: number): Promise<void> {
+    setActionError(null);
+    try {
+      await apiPatch(`/loan-requests/${loanRequestId}/lend`);
+      await loadLoanRequestList();
+    } catch (error) {
+      setActionError(toErrorMessage(error, "貸出処理に失敗しました。"));
     }
   }
 
@@ -154,6 +170,27 @@ export function LoanRequestManagePage() {
     }
   }
 
+  async function handleReturnSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (panel.type !== "return") {
+      return;
+    }
+    setActionError(null);
+    setIsSubmitting(true);
+    try {
+      const loanRequestReturnRequest: LoanRequestReturnRequest = {
+        return_note: returnNoteInput === "" ? null : returnNoteInput,
+      };
+      await apiPatch(`/loan-requests/${panel.loanRequest.loan_request_id}/return`, loanRequestReturnRequest);
+      closePanel();
+      await loadLoanRequestList();
+    } catch (error) {
+      setActionError(toErrorMessage(error, "返却処理に失敗しました。"));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   if (loanRequestList === null) {
     if (loadError !== null) {
       return (
@@ -171,7 +208,6 @@ export function LoanRequestManagePage() {
   return (
     <div>
       <h1>申請管理</h1>
-      <p>貸出処理・返却処理は、別バックログで本画面に追加する予定です。</p>
       {loadError !== null && <ErrorMessage message={loadError} />}
       {actionError !== null && <ErrorMessage message={actionError} />}
 
@@ -228,8 +264,18 @@ export function LoanRequestManagePage() {
                       </>
                     )}
                     {loanRequest.status === "承認済み" && (
-                      <button type="button" onClick={() => openAdminCancelPanel(loanRequest)}>
-                        取消
+                      <>
+                        <button type="button" onClick={() => void handleLend(loanRequest.loan_request_id)}>
+                          貸出処理
+                        </button>
+                        <button type="button" onClick={() => openAdminCancelPanel(loanRequest)}>
+                          取消
+                        </button>
+                      </>
+                    )}
+                    {loanRequest.status === "貸出中" && (
+                      <button type="button" onClick={() => openReturnPanel(loanRequest)}>
+                        返却処理
                       </button>
                     )}
                   </td>
@@ -279,6 +325,27 @@ export function LoanRequestManagePage() {
           </label>
           <button type="submit" disabled={isSubmitting}>
             取消す
+          </button>
+          <button type="button" onClick={closePanel}>
+            キャンセル
+          </button>
+        </form>
+      )}
+
+      {panel.type === "return" && (
+        <form onSubmit={(event) => void handleReturnSubmit(event)}>
+          <h2>返却処理（申請ID: {panel.loanRequest.loan_request_id}）</h2>
+          <label>
+            状態メモ（任意、故障・破損等）
+            <input
+              type="text"
+              value={returnNoteInput}
+              onChange={(event) => setReturnNoteInput(event.target.value)}
+              maxLength={200}
+            />
+          </label>
+          <button type="submit" disabled={isSubmitting}>
+            返却する
           </button>
           <button type="button" onClick={closePanel}>
             キャンセル

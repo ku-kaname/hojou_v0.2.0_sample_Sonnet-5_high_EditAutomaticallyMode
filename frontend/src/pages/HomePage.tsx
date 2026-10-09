@@ -2,11 +2,8 @@
  * ホーム（ダッシュボード）画面
  *
  * 【概要】
- * ログインユーザー宛の通知一覧の確認・既読化（F08）を行う画面
- *
- * 【備考】
- * 自分の貸出中・期限超過件数、（管理者）承認待ち・期限超過件数の表示（F13）は、
- * 別バックログ「実装（貸出・返却・履歴）」で本画面へ追加する予定であり、本画面では実装しない。
+ * ログインユーザー宛の通知一覧の確認・既読化（F08）に加え、
+ * 管理者向けに期限超過件数の表示（F13）を行う画面
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -15,7 +12,7 @@ import { apiGet, apiPatch, ApiError } from "../api/client";
 import { ErrorMessage } from "../components/ErrorMessage";
 import { LoadingIndicator } from "../components/LoadingIndicator";
 import { useAuth } from "../contexts/AuthContext";
-import type { NotificationResponse, NotificationType } from "../types/common";
+import type { LoanRequestResponse, NotificationResponse, NotificationType } from "../types/common";
 
 function toErrorMessage(error: unknown, fallback: string): string {
   return error instanceof ApiError ? error.message : fallback;
@@ -34,6 +31,8 @@ export function HomePage() {
   const [notificationList, setNotificationList] = useState<NotificationResponse[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [overdueCount, setOverdueCount] = useState<number | null>(null);
+  const [overdueLoadError, setOverdueLoadError] = useState<string | null>(null);
 
   const loadNotificationList = useCallback(async (): Promise<void> => {
     setLoadError(null);
@@ -45,9 +44,25 @@ export function HomePage() {
     }
   }, []);
 
+  const loadOverdueCount = useCallback(async (): Promise<void> => {
+    setOverdueLoadError(null);
+    try {
+      const list = await apiGet<LoanRequestResponse[]>("/loan-requests?scope=overdue");
+      setOverdueCount(list.length);
+    } catch (error) {
+      setOverdueLoadError(toErrorMessage(error, "期限超過件数の取得に失敗しました。"));
+    }
+  }, []);
+
   useEffect(() => {
     void loadNotificationList();
   }, [loadNotificationList]);
+
+  useEffect(() => {
+    if (user?.role === "管理者") {
+      void loadOverdueCount();
+    }
+  }, [user, loadOverdueCount]);
 
   async function handleMarkAsRead(notificationId: number): Promise<void> {
     setActionError(null);
@@ -67,6 +82,22 @@ export function HomePage() {
         <Link to="/loan-requests/mine">自分の申請一覧</Link>
         {user?.role === "管理者" && <Link to="/loan-requests/manage">申請管理</Link>}
       </p>
+
+      {user?.role === "管理者" && (
+        <>
+          <h2>期限超過</h2>
+          {overdueLoadError !== null ? (
+            <ErrorMessage message={overdueLoadError} />
+          ) : overdueCount === null ? (
+            <LoadingIndicator />
+          ) : (
+            <p>
+              期限超過中の貸出：{overdueCount}件
+              <Link to="/loan-requests/overdue">一覧を見る</Link>
+            </p>
+          )}
+        </>
+      )}
 
       <h2>通知</h2>
       {actionError !== null && <ErrorMessage message={actionError} />}
