@@ -114,6 +114,10 @@ export interface LoanRequestRejectRequest {
 
 export type LoanRequestAdminCancelRequest = LoanRequestRejectRequest;
 
+export interface LoanRequestReturnRequest {
+  return_note?: string | null;
+}
+
 export type NotificationType = "承認" | "却下" | "取消" | "新規申請" | "返却期限";
 
 export interface NotificationResponse {

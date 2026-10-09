@@ -16,9 +16,11 @@ import { EquipmentDetailPage } from "./pages/EquipmentDetailPage";
 import { EquipmentListPage } from "./pages/EquipmentListPage";
 import { EquipmentManagementPage } from "./pages/EquipmentManagementPage";
 import { HomePage } from "./pages/HomePage";
+import { LoanHistoryPage } from "./pages/LoanHistoryPage";
 import { LoanRequestManagePage } from "./pages/LoanRequestManagePage";
 import { LoanRequestMinePage } from "./pages/LoanRequestMinePage";
 import { LoginPage } from "./pages/LoginPage";
+import { OverdueLoanRequestsPage } from "./pages/OverdueLoanRequestsPage";
 import { UserManagementPage } from "./pages/UserManagementPage";
 
 export function App() {
@@ -110,6 +112,26 @@ export function App() {
               <AdminRoute>
                 <Layout>
                   <LoanRequestManagePage />
+                </Layout>
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/loan-requests/overdue"
+            element={
+              <AdminRoute>
+                <Layout>
+                  <OverdueLoanRequestsPage />
+                </Layout>
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/loan-requests/history"
+            element={
+              <AdminRoute>
+                <Layout>
+                  <LoanHistoryPage />
                 </Layout>
               </AdminRoute>
             }

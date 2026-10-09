@@ -172,6 +172,67 @@ export function postForm<T>(path: string, fields: Record<string, string>): Promi
 }
 
 /**
+ * ファイルダウンロードリクエスト（バイナリ）
+ *
+ * 【処理概要】
+ * - CSV等のバイナリレスポンスを返すエンドポイントへGETリクエストし、`Blob`として受け取る
+ * - ファイル名は、レスポンスの`Content-Disposition`ヘッダーから抽出する（取得できない場合は`fallbackFileName`を使用）
+ *
+ * 【パラメータ】
+ * - path (string) : APIパス (必須)
+ * - fallbackFileName (string) : ファイル名が取得できない場合の既定ファイル名 (必須)
+ *
+ * 【戻り値】
+ * - result ({ blob: Blob; fileName: string }) : レスポンス本体とファイル名
+ *
+ * 【例外処理】
+ * - ApiError : レスポンスが2xx以外の場合
+ *
+ * 【処理フロー】
+ * 1. リクエストヘッダーの設定
+ * 2. リクエストの送信
+ * 3. 401エラー時共通処理の呼び出し
+ * 4. 例外処理
+ * 5. ファイル名の抽出
+ * 6. 戻り値を返却
+ */
+export async function apiGetBlob(
+  path: string,
+  fallbackFileName: string,
+): Promise<{ blob: Blob; fileName: string }> {
+  // 1. リクエストヘッダーの設定
+  const headers = new Headers();
+  if (accessToken !== null) {
+    headers.set("Authorization", `Bearer ${accessToken}`);
+  }
+
+  // 2. リクエストの送信
+  const response = await fetch(`${API_BASE_URL}${path}`, { method: "GET", headers });
+
+  // 3. 401エラー時共通処理の呼び出し
+  if (response.status === 401) {
+    unauthorizedHandler?.();
+  }
+
+  // 4. 例外処理：レスポンスが2xx以外
+  if (!response.ok) {
+    const body: unknown = await response.json().catch(() => null);
+    const rawDetail =
+      typeof body === "object" && body !== null && "detail" in body ? body.detail : undefined;
+    const message = typeof rawDetail === "string" ? rawDetail : response.statusText;
+    throw new ApiError(response.status, message, rawDetail);
+  }
+
+  // 5. ファイル名の抽出
+  const contentDisposition = response.headers.get("Content-Disposition");
+  const fileNameMatch = contentDisposition?.match(/filename="?([^";]+)"?/);
+  const fileName = fileNameMatch?.[1] ?? fallbackFileName;
+
+  // 6. 戻り値を返却
+  return { blob: await response.blob(), fileName };
+}
+
+/**
  * ファイルアップロードリクエスト
  *
  * 【処理概要】

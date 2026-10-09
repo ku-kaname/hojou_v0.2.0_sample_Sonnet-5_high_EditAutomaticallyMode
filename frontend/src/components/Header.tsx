@@ -21,6 +21,8 @@ export function Header() {
           <Link to="/equipment">備品一覧</Link>
           <Link to="/loan-requests/mine">自分の申請一覧</Link>
           {user.role === "管理者" && <Link to="/loan-requests/manage">申請管理</Link>}
+          {user.role === "管理者" && <Link to="/loan-requests/overdue">期限超過一覧</Link>}
+          {user.role === "管理者" && <Link to="/loan-requests/history">貸出履歴</Link>}
           {user.role === "管理者" && <Link to="/equipment-management">備品管理</Link>}
           {user.role === "管理者" && <Link to="/users">ユーザー管理</Link>}
           <button type="button" onClick={() => void logout()}>
