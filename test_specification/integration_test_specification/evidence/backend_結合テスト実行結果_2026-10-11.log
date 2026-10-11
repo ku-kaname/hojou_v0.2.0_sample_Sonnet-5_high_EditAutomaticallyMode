@@ -1,0 +1,31 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.13, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\youta\Desktop\management\hojou_sample\hojou_v0.2.0_sample_Sonnet-5_high\backend\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\youta\Desktop\management\hojou_sample\hojou_v0.2.0_sample_Sonnet-5_high\backend
+configfile: pyproject.toml
+plugins: anyio-4.15.1, cov-7.1.0, mock-3.16.0
+collecting ... collected 15 items
+
+app/tests/integration/test_health_check.py::test_health_check_001_db_connected_returns_ok PASSED [  6%]
+app/tests/integration/test_health_check.py::test_health_check_002_db_disconnected_returns_error PASSED [ 13%]
+app/tests/integration/test_login.py::test_login_endpoint_001_valid_credentials_returns_token PASSED [ 20%]
+app/tests/integration/test_login.py::test_login_endpoint_002_unknown_user_id_returns_401 PASSED [ 26%]
+app/tests/integration/test_login.py::test_login_endpoint_003_wrong_password_returns_401 PASSED [ 33%]
+app/tests/integration/test_login.py::test_login_endpoint_004_five_consecutive_failures_locks_account PASSED [ 40%]
+app/tests/integration/test_login.py::test_login_endpoint_005_locked_account_rejects_correct_password PASSED [ 46%]
+app/tests/integration/test_login.py::test_login_endpoint_006_missing_password_returns_422 PASSED [ 53%]
+app/tests/integration/test_login.py::test_login_endpoint_007_missing_username_returns_422 PASSED [ 60%]
+app/tests/integration/test_logout.py::test_logout_endpoint_001_logged_in_user_logs_out PASSED [ 66%]
+app/tests/integration/test_logout.py::test_logout_endpoint_002_reused_old_token_returns_401 PASSED [ 73%]
+app/tests/integration/test_logout.py::test_logout_endpoint_003_missing_authorization_header_returns_401 PASSED [ 80%]
+app/tests/integration/test_logout.py::test_logout_endpoint_004_tampered_signature_returns_401 PASSED [ 86%]
+app/tests/integration/test_logout.py::test_logout_endpoint_005_expired_token_returns_401 PASSED [ 93%]
+app/tests/integration/test_logout.py::test_logout_endpoint_006_deactivated_user_token_returns_401 PASSED [100%]
+
+============================== warnings summary ===============================
+.venv\Lib\site-packages\fastapi\testclient.py:1
+  C:\Users\youta\Desktop\management\hojou_sample\hojou_v0.2.0_sample_Sonnet-5_high\backend\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 15 passed, 1 warning in 5.43s ========================

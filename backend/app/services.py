@@ -93,7 +93,11 @@ def login(db: Session, user_id: str, password: str) -> TokenResponse:
 
     # 3. ロック状態の確認
     # 3.(1).① 例外処理：ロック解除日時が現在日時より後
-    if user.locked_until is not None and user.locked_until > now:
+    # （DBから取得したロック解除日時はタイムゾーン情報を持たないため、UTCとして補完した上で比較する）
+    locked_until = user.locked_until
+    if locked_until is not None and locked_until.tzinfo is None:
+        locked_until = locked_until.replace(tzinfo=dt.UTC)
+    if locked_until is not None and locked_until > now:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="ログイン試行回数が上限に達したため、アカウントが一時的にロックされています。しばらくしてから再度お試しください。",

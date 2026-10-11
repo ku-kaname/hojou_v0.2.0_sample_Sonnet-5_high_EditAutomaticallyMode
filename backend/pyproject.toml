@@ -39,7 +39,7 @@ python_version = "3.12"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-testpaths = ["app/tests"]
+testpaths = ["app/tests/unit"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]

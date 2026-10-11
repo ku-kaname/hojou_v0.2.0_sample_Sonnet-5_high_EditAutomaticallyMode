@@ -8,6 +8,7 @@ DB接続管理
 import os
 from collections.abc import Generator
 
+from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -40,14 +41,16 @@ def get_db() -> Generator[Session, None, None]:
     - db (Session) : DBセッション
 
     【例外処理】
-    - なし（呼び出し元の処理で例外が発生した場合はロールバックの上、例外を再送出する）
+    - なし（呼び出し元の処理でHTTPExceptionが発生した場合はコミットの上、例外を再送出する。
+      その他の例外が発生した場合はロールバックの上、例外を再送出する）
 
     【処理フロー】
     1. DBセッションを生成
     2. 呼び出し元へセッションを渡す
     3. 呼び出し元の処理が正常終了した場合、コミットする
-    4. 呼び出し元の処理で例外が発生した場合、ロールバックした上で例外を再送出する
-    5. セッションを解放する
+    4. 呼び出し元の処理でHTTPExceptionが発生した場合、業務上正常な応答のためコミットした上で例外を再送出する
+    5. 呼び出し元の処理でその他の例外が発生した場合、ロールバックした上で例外を再送出する
+    6. セッションを解放する
     """
 
     # 1. DBセッションを生成
@@ -58,10 +61,14 @@ def get_db() -> Generator[Session, None, None]:
         yield db
         # 3. 呼び出し元の処理が正常終了した場合、コミットする
         db.commit()
+    except HTTPException:
+        # 4. 呼び出し元の処理でHTTPExceptionが発生した場合、業務上正常な応答のためコミットした上で例外を再送出する
+        db.commit()
+        raise
     except Exception:
-        # 4. 呼び出し元の処理で例外が発生した場合、ロールバックした上で例外を再送出する
+        # 5. 呼び出し元の処理でその他の例外が発生した場合、ロールバックした上で例外を再送出する
         db.rollback()
         raise
     finally:
-        # 5. セッションを解放する
+        # 6. セッションを解放する
         db.close()
