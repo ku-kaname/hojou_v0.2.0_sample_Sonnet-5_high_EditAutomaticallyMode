@@ -126,9 +126,10 @@ def _make_equipment_on_loan(
     """対象備品に対して申請→承認→貸出処理を行い、「貸出中」の状態を作る（貸出中前提条件の整備用）
 
     貸出処理（lend_loan_request）は開始日が今日より後の場合エラーとなるため、
-    開始日は必ず今日とする。
+    開始日は必ず今日とする。サーバー側の「今日」はUTCで判定されるため（services.py参照）、
+    ローカルタイムゾーンの日付（dt.date.today()）ではなくUTCの日付を用いる。
     """
-    today = dt.date.today()
+    today = dt.datetime.now(dt.UTC).date()
     due_date = today + dt.timedelta(days=7)
 
     create_response = client.post(
@@ -163,7 +164,7 @@ def _make_equipment_on_loan(
 # テスト対象ファイル：main.py
 # テスト対象クラス：-
 # テスト対象メソッド：search_equipment_endpoint
-# テスト仕様書：test_specification/integration_test_specification/備品管理/備品検索一覧取得_結合テスト仕様書_v0.2.0.md
+# テスト仕様書：test_specification/integration_test_specification/備品管理/備品検索一覧取得_結合テスト仕様書.md
 # ==================================================
 
 
@@ -335,7 +336,7 @@ def test_search_equipment_endpoint_010_password_change_not_completed_returns_403
 # テスト対象ファイル：main.py
 # テスト対象クラス：-
 # テスト対象メソッド：get_equipment_endpoint
-# テスト仕様書：test_specification/integration_test_specification/備品管理/備品詳細取得_結合テスト仕様書_v0.2.0.md
+# テスト仕様書：test_specification/integration_test_specification/備品管理/備品詳細取得_結合テスト仕様書.md
 # ==================================================
 
 
@@ -468,7 +469,7 @@ def test_get_equipment_endpoint_008_non_numeric_equipment_id_returns_422(client:
 # テスト対象ファイル：main.py
 # テスト対象クラス：-
 # テスト対象メソッド：create_equipment_endpoint
-# テスト仕様書：test_specification/integration_test_specification/備品管理/備品登録_結合テスト仕様書_v0.2.0.md
+# テスト仕様書：test_specification/integration_test_specification/備品管理/備品登録_結合テスト仕様書.md
 # ==================================================
 
 
@@ -641,7 +642,7 @@ def test_create_equipment_endpoint_010_password_change_not_completed_returns_403
 # テスト対象ファイル：main.py
 # テスト対象クラス：-
 # テスト対象メソッド：update_equipment_endpoint
-# テスト仕様書：test_specification/integration_test_specification/備品管理/備品編集_結合テスト仕様書_v0.2.0.md
+# テスト仕様書：test_specification/integration_test_specification/備品管理/備品編集_結合テスト仕様書.md
 # ==================================================
 
 
@@ -797,7 +798,7 @@ def test_update_equipment_endpoint_009_missing_name_returns_422(client: TestClie
 # テスト対象ファイル：main.py
 # テスト対象クラス：-
 # テスト対象メソッド：deactivate_equipment_endpoint
-# テスト仕様書：test_specification/integration_test_specification/備品管理/備品無効化_結合テスト仕様書_v0.2.0.md
+# テスト仕様書：test_specification/integration_test_specification/備品管理/備品無効化_結合テスト仕様書.md
 # ==================================================
 
 
@@ -905,7 +906,7 @@ def test_deactivate_equipment_endpoint_006_password_change_not_completed_returns
 # テスト対象ファイル：main.py
 # テスト対象クラス：-
 # テスト対象メソッド：activate_equipment_endpoint
-# テスト仕様書：test_specification/integration_test_specification/備品管理/備品再有効化_結合テスト仕様書_v0.2.0.md
+# テスト仕様書：test_specification/integration_test_specification/備品管理/備品再有効化_結合テスト仕様書.md
 # ==================================================
 
 
@@ -999,7 +1000,7 @@ def test_activate_equipment_endpoint_005_missing_authorization_header_returns_40
 # テスト対象ファイル：main.py
 # テスト対象クラス：-
 # テスト対象メソッド：get_equipment_reservations_endpoint
-# テスト仕様書：test_specification/integration_test_specification/備品管理/備品予約状況確認_結合テスト仕様書_v0.2.0.md
+# テスト仕様書：test_specification/integration_test_specification/備品管理/備品予約状況確認_結合テスト仕様書.md
 # ==================================================
 
 
@@ -1140,7 +1141,7 @@ def test_get_equipment_reservations_endpoint_007_password_change_not_completed_r
 # テスト対象ファイル：main.py
 # テスト対象クラス：-
 # テスト対象メソッド：bulk_import_equipment_endpoint
-# テスト仕様書：test_specification/integration_test_specification/備品管理/備品CSV一括登録_結合テスト仕様書_v0.2.0.md
+# テスト仕様書：test_specification/integration_test_specification/備品管理/備品CSV一括登録_結合テスト仕様書.md
 # ==================================================
 
 
@@ -1184,7 +1185,7 @@ def test_bulk_import_equipment_endpoint_002_file_size_exceeds_limit_returns_400(
 
     assert response.status_code == 400
     assert response.json() == {
-        "error_list": [{"row_number": None, "message": "ファイルサイズが上限（5MB）を超えています。"}]
+        "detail": {"error_list": [{"row_number": None, "message": "ファイルサイズが上限（5MB）を超えています。"}]}
     }
 
 
@@ -1204,7 +1205,11 @@ def test_bulk_import_equipment_endpoint_003_non_utf8_encoding_returns_400(client
 
     assert response.status_code == 400
     assert response.json() == {
-        "error_list": [{"row_number": None, "message": "ファイルの文字コードが不正です。UTF-8で保存してください。"}]
+        "detail": {
+            "error_list": [
+                {"row_number": None, "message": "ファイルの文字コードが不正です。UTF-8で保存してください。"}
+            ]
+        }
     }
 
 
@@ -1224,7 +1229,7 @@ def test_bulk_import_equipment_endpoint_004_invalid_header_column_count_returns_
 
     assert response.status_code == 400
     assert response.json() == {
-        "error_list": [{"row_number": None, "message": _INVALID_HEADER_COLUMN_DETAIL}]
+        "detail": {"error_list": [{"row_number": None, "message": _INVALID_HEADER_COLUMN_DETAIL}]}
     }
 
 
@@ -1245,7 +1250,7 @@ def test_bulk_import_equipment_endpoint_005_data_row_count_exceeds_limit_returns
 
     assert response.status_code == 400
     assert response.json() == {
-        "error_list": [{"row_number": None, "message": "データ行数が上限（1,000行）を超えています。"}]
+        "detail": {"error_list": [{"row_number": None, "message": "データ行数が上限（1,000行）を超えています。"}]}
     }
 
 
@@ -1266,7 +1271,7 @@ def test_bulk_import_equipment_endpoint_006_invalid_column_count_row_returns_400
     )
 
     assert response.status_code == 400
-    assert response.json() == {"error_list": [{"row_number": 2, "message": "列数が不正です。"}]}
+    assert response.json() == {"detail": {"error_list": [{"row_number": 2, "message": "列数が不正です。"}]}}
 
 
 # ========== 結合テストNo.7 ==========
@@ -1286,7 +1291,7 @@ def test_bulk_import_equipment_endpoint_007_invalid_asset_number_row_returns_400
     )
 
     assert response.status_code == 400
-    assert response.json() == {"error_list": [{"row_number": 2, "message": "資産番号が不正です。"}]}
+    assert response.json() == {"detail": {"error_list": [{"row_number": 2, "message": "資産番号が不正です。"}]}}
 
 
 # ========== 結合テストNo.8 ==========
@@ -1309,10 +1314,12 @@ def test_bulk_import_equipment_endpoint_008_multiple_violations_in_one_row_retur
 
     assert response.status_code == 400
     assert response.json() == {
-        "error_list": [
-            {"row_number": 2, "message": "備品名が不正です。"},
-            {"row_number": 2, "message": "分類が不正です。"},
-        ]
+        "detail": {
+            "error_list": [
+                {"row_number": 2, "message": "備品名が不正です。"},
+                {"row_number": 2, "message": "分類が不正です。"},
+            ]
+        }
     }
 
 
@@ -1336,7 +1343,7 @@ def test_bulk_import_equipment_endpoint_009_duplicate_asset_number_in_csv_return
     )
 
     assert response.status_code == 400
-    assert response.json() == {"error_list": [{"row_number": 3, "message": "資産番号が重複しています。"}]}
+    assert response.json() == {"detail": {"error_list": [{"row_number": 3, "message": "資産番号が重複しています。"}]}}
 
 
 # ========== 結合テストNo.10 ==========
@@ -1359,7 +1366,9 @@ def test_bulk_import_equipment_endpoint_010_duplicate_asset_number_in_db_returns
     )
 
     assert response.status_code == 400
-    assert response.json() == {"error_list": [{"row_number": 2, "message": _DUPLICATE_ASSET_NUMBER_DETAIL}]}
+    assert response.json() == {
+        "detail": {"error_list": [{"row_number": 2, "message": _DUPLICATE_ASSET_NUMBER_DETAIL}]}
+    }
 
 
 # ========== 結合テストNo.11 ==========
@@ -1405,10 +1414,12 @@ def test_bulk_import_equipment_endpoint_012_errors_sorted_by_row_number_ascendin
 
     assert response.status_code == 400
     assert response.json() == {
-        "error_list": [
-            {"row_number": 2, "message": "備品名が不正です。"},
-            {"row_number": 3, "message": "分類が不正です。"},
-        ]
+        "detail": {
+            "error_list": [
+                {"row_number": 2, "message": "備品名が不正です。"},
+                {"row_number": 3, "message": "分類が不正です。"},
+            ]
+        }
     }
 
 
