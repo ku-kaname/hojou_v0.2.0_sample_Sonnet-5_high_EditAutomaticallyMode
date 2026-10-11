@@ -1,0 +1,44 @@
+
+ RUN  v2.1.9 C:/Users/youta/Desktop/management/hojou_sample/hojou_v0.2.0_sample_Sonnet-5_high/frontend
+
+ ✓ src/tests/unit/client.test.ts > request（apiGet/apiPost/postForm経由） > test_request_001_sets_authorization_header_when_token_present
+ ✓ src/tests/unit/client.test.ts > request（apiGet/apiPost/postForm経由） > test_request_002_omits_authorization_header_when_token_absent
+ ✓ src/tests/unit/client.test.ts > request（apiGet/apiPost/postForm経由） > test_request_003_calls_unauthorized_handler_on_401
+ ✓ src/tests/unit/client.test.ts > request（apiGet/apiPost/postForm経由） > test_request_004_does_not_call_unauthorized_handler_on_200
+ ✓ src/tests/unit/client.test.ts > request（apiGet/apiPost/postForm経由） > test_request_005_error_message_uses_string_detail
+ ✓ src/tests/unit/client.test.ts > request（apiGet/apiPost/postForm経由） > test_request_006_error_message_falls_back_to_status_text_for_non_string_detail
+ ✓ src/tests/unit/client.test.ts > request（apiGet/apiPost/postForm経由） > test_request_007_error_message_falls_back_to_status_text_when_body_unreadable
+ ✓ src/tests/unit/client.test.ts > request（apiGet/apiPost/postForm経由） > test_request_008_returns_undefined_on_204
+ ✓ src/tests/unit/client.test.ts > request（apiGet/apiPost/postForm経由） > test_request_009_returns_json_body_on_200
+ ✓ src/tests/unit/client.test.ts > request（apiGet/apiPost/postForm経由） > test_request_010_post_with_body_sets_json_content_type
+ ✓ src/tests/unit/client.test.ts > request（apiGet/apiPost/postForm経由） > test_request_011_post_without_body_omits_body_and_content_type
+ ✓ src/tests/unit/client.test.ts > request（apiGet/apiPost/postForm経由） > test_request_012_post_form_encodes_fields
+ ✓ src/tests/unit/client.test.ts > apiGetBlob > test_apiGetBlob_001_extracts_filename_from_content_disposition
+ ✓ src/tests/unit/client.test.ts > apiGetBlob > test_apiGetBlob_002_uses_fallback_filename_when_header_absent
+ ✓ src/tests/unit/client.test.ts > apiGetBlob > test_apiGetBlob_003_throws_api_error_on_non_2xx
+ ✓ src/tests/unit/client.test.ts > apiGetBlob > test_apiGetBlob_004_returns_blob_body
+ ✓ src/tests/unit/AuthContext.test.tsx > AuthContext > test_restoreSession_001_no_stored_token_skips_fetch
+ ✓ src/tests/unit/ProtectedRoute.test.tsx > test_ProtectedRoute_001_loading_shows_loading_indicator
+ ✓ src/tests/unit/ProtectedRoute.test.tsx > test_ProtectedRoute_002_not_logged_in_redirects_to_login
+ ✓ src/tests/unit/ProtectedRoute.test.tsx > test_ProtectedRoute_003_password_change_required_redirects_when_not_on_change_password_page
+ ✓ src/tests/unit/ProtectedRoute.test.tsx > test_ProtectedRoute_004_password_change_required_on_change_password_page_renders_children
+ ✓ src/tests/unit/ProtectedRoute.test.tsx > test_ProtectedRoute_005_password_change_not_required_renders_children
+ ✓ src/tests/unit/AdminRoute.test.tsx > test_AdminRoute_001_loading_shows_loading_indicator
+ ✓ src/tests/unit/AdminRoute.test.tsx > test_AdminRoute_002_not_logged_in_redirects_to_login
+ ✓ src/tests/unit/AdminRoute.test.tsx > test_AdminRoute_003_password_change_required_redirects_to_change_password
+ ✓ src/tests/unit/AdminRoute.test.tsx > test_AdminRoute_004_non_admin_role_redirects_to_home
+ ✓ src/tests/unit/AdminRoute.test.tsx > test_AdminRoute_005_admin_role_renders_children
+ ✓ src/tests/unit/AuthContext.test.tsx > AuthContext > test_restoreSession_002_valid_stored_token_restores_user
+ ✓ src/tests/unit/AuthContext.test.tsx > AuthContext > test_restoreSession_003_invalid_stored_token_clears_session
+ ✓ src/tests/unit/AuthContext.test.tsx > AuthContext > test_login_001_valid_credentials_sets_user
+ ✓ src/tests/unit/AuthContext.test.tsx > AuthContext > test_login_002_invalid_credentials_throws_and_keeps_user_null
+ ✓ src/tests/unit/AuthContext.test.tsx > AuthContext > test_changePassword_001_valid_current_password_sets_user
+ ✓ src/tests/unit/AuthContext.test.tsx > AuthContext > test_changePassword_002_invalid_current_password_throws
+ ✓ src/tests/unit/AuthContext.test.tsx > AuthContext > test_logout_001_success_clears_session
+ ✓ src/tests/unit/AuthContext.test.tsx > AuthContext > test_logout_002_failure_still_clears_session
+
+ Test Files  4 passed (4)
+      Tests  35 passed (35)
+   Start at  18:08:37
+   Duration  1.43s (transform 180ms, setup 329ms, collect 501ms, tests 462ms, environment 1.86s, prepare 494ms)
+

@@ -1,0 +1,26 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.13, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\youta\Desktop\management\hojou_sample\hojou_v0.2.0_sample_Sonnet-5_high\backend\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\youta\Desktop\management\hojou_sample\hojou_v0.2.0_sample_Sonnet-5_high\backend
+configfile: pyproject.toml
+plugins: anyio-4.15.1, cov-7.1.0, mock-3.16.0
+collecting ... collected 16 items
+
+app/tests/unit/test_auth.py::test_hash_password_001_hash_result_format PASSED [  6%]
+app/tests/unit/test_auth.py::test_hash_password_002_salt_makes_result_non_deterministic PASSED [ 12%]
+app/tests/unit/test_auth.py::test_verify_password_001_matching_password_returns_true PASSED [ 18%]
+app/tests/unit/test_auth.py::test_verify_password_002_mismatched_password_returns_false PASSED [ 25%]
+app/tests/unit/test_auth.py::test_create_access_token_001_payload_contains_user_id_and_generation PASSED [ 31%]
+app/tests/unit/test_auth.py::test_get_current_active_user_001_decode_failure_raises_401 PASSED [ 37%]
+app/tests/unit/test_auth.py::test_get_current_active_user_002_missing_sub_raises_401 PASSED [ 43%]
+app/tests/unit/test_auth.py::test_get_current_active_user_003_missing_token_generation_raises_401 PASSED [ 50%]
+app/tests/unit/test_auth.py::test_get_current_active_user_004_user_not_found_raises_401 PASSED [ 56%]
+app/tests/unit/test_auth.py::test_get_current_active_user_005_inactive_user_raises_401 PASSED [ 62%]
+app/tests/unit/test_auth.py::test_get_current_active_user_006_token_generation_mismatch_raises_401 PASSED [ 68%]
+app/tests/unit/test_auth.py::test_get_current_active_user_007_valid_token_returns_user PASSED [ 75%]
+app/tests/unit/test_auth.py::test_require_admin_001_non_admin_role_raises_403 PASSED [ 81%]
+app/tests/unit/test_auth.py::test_require_admin_002_admin_role_returns_user PASSED [ 87%]
+app/tests/unit/test_auth.py::test_require_password_changed_001_change_required_raises_403 PASSED [ 93%]
+app/tests/unit/test_auth.py::test_require_password_changed_002_change_not_required_returns_user PASSED [100%]
+
+============================= 16 passed in 0.75s ==============================
