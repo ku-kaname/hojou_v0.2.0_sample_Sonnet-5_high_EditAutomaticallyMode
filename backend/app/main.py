@@ -1163,6 +1163,68 @@ def get_loan_requests_endpoint(
     return loan_request_list
 
 
+# ====================================================================================================
+# 貸出履歴CSV出力
+# - export_loan_requests_csv_endpoint : 貸出履歴CSV出力
+
+# 設計書：設計書/main/貸出・返却・履歴/貸出履歴CSV出力_v0.2.0.md
+#
+# 【ルーティング順序に関する注意】
+# FastAPI（Starlette）はルートを登録順に照合するため、本エンドポイント（/loan-requests/export）は
+# 可変パスパラメータを持つ @app.get("/loan-requests/{loan_request_id}") より前に登録する必要がある。
+# 後ろに登録すると "export" がloan_request_idとして一致してしまい、本エンドポイントに到達できない。
+# ====================================================================================================
+
+
+@app.get("/loan-requests/export")
+def export_loan_requests_csv_endpoint(
+    start_date_from: dt.date | None = Query(default=None),
+    start_date_to: dt.date | None = Query(default=None),
+    equipment_id: int | None = Query(default=None),
+    applicant_user_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(auth.require_password_changed),
+    current_admin: User = Depends(auth.require_admin),
+) -> Response:
+    """
+    貸出履歴CSV出力
+
+    設計書：設計書/main/貸出・返却・履歴/貸出履歴CSV出力_v0.2.0.md
+
+    【処理概要】
+    - 管理者が、条件を指定して貸出申請の全履歴をCSV形式で出力する
+
+    【パラメータ】
+    - start_date_from (date | None) : 開始日下限（含む） (任意)
+    - start_date_to (date | None) : 開始日上限（含む） (任意)
+    - equipment_id (int | None) : 備品ID (任意)
+    - applicant_user_id (int | None) : 申請者ID (任意)
+    - db (Session) : データベース (必須)
+
+    【戻り値】
+    - response (Response) : CSV形式（UTF-8、BOM付き）のレスポンス
+
+    【例外処理】
+    - なし（オーケストレーション層の例外処理に従う）
+
+    【処理フロー】
+    1. 貸出履歴CSV出力処理の呼び出し
+    2. 戻り値を返却
+    """
+
+    # 1. 貸出履歴CSV出力処理の呼び出し
+    csv_bytes = services.export_loan_requests_csv(
+        current_admin, db, start_date_from, start_date_to, equipment_id, applicant_user_id
+    )
+
+    # 2. 戻り値を返却
+    return Response(
+        content=csv_bytes,
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="loan_requests_export.csv"'},
+    )
+
+
 @app.get("/loan-requests/{loan_request_id}")
 def get_loan_request_endpoint(
     loan_request_id: int,
@@ -1503,60 +1565,3 @@ def return_loan_request_endpoint(
 
     # 2. 戻り値を返却
     return loan_request_response
-
-
-# ====================================================================================================
-# 貸出履歴CSV出力
-# - export_loan_requests_csv_endpoint : 貸出履歴CSV出力
-
-# 設計書：設計書/main/貸出・返却・履歴/貸出履歴CSV出力_v0.2.0.md
-# ====================================================================================================
-
-
-@app.get("/loan-requests/export")
-def export_loan_requests_csv_endpoint(
-    start_date_from: dt.date | None = Query(default=None),
-    start_date_to: dt.date | None = Query(default=None),
-    equipment_id: int | None = Query(default=None),
-    applicant_user_id: int | None = Query(default=None),
-    db: Session = Depends(get_db),
-    _: User = Depends(auth.require_password_changed),
-    current_admin: User = Depends(auth.require_admin),
-) -> Response:
-    """
-    貸出履歴CSV出力
-
-    設計書：設計書/main/貸出・返却・履歴/貸出履歴CSV出力_v0.2.0.md
-
-    【処理概要】
-    - 管理者が、条件を指定して貸出申請の全履歴をCSV形式で出力する
-
-    【パラメータ】
-    - start_date_from (date | None) : 開始日下限（含む） (任意)
-    - start_date_to (date | None) : 開始日上限（含む） (任意)
-    - equipment_id (int | None) : 備品ID (任意)
-    - applicant_user_id (int | None) : 申請者ID (任意)
-    - db (Session) : データベース (必須)
-
-    【戻り値】
-    - response (Response) : CSV形式（UTF-8、BOM付き）のレスポンス
-
-    【例外処理】
-    - なし（オーケストレーション層の例外処理に従う）
-
-    【処理フロー】
-    1. 貸出履歴CSV出力処理の呼び出し
-    2. 戻り値を返却
-    """
-
-    # 1. 貸出履歴CSV出力処理の呼び出し
-    csv_bytes = services.export_loan_requests_csv(
-        current_admin, db, start_date_from, start_date_to, equipment_id, applicant_user_id
-    )
-
-    # 2. 戻り値を返却
-    return Response(
-        content=csv_bytes,
-        media_type="text/csv",
-        headers={"Content-Disposition": 'attachment; filename="loan_requests_export.csv"'},
-    )
