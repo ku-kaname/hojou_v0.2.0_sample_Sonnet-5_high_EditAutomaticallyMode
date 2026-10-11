@@ -149,3 +149,96 @@ app/tests/integration/test_equipment_management.py::test_bulk_import_equipment_e
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 ======================= 70 passed, 1 warning in 20.02s ========================
+
+============================= test session starts =============================
+platform win32 -- Python 3.13.13, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\youta\Desktop\management\hojou_sample\hojou_v0.2.0_sample_Sonnet-5_high\backend\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\youta\Desktop\management\hojou_sample\hojou_v0.2.0_sample_Sonnet-5_high\backend
+configfile: pyproject.toml
+plugins: anyio-4.15.1, cov-7.1.0, mock-3.16.0
+collecting ... collected 76 items
+
+app/tests/integration/test_loan_request_management.py::test_create_loan_request_endpoint_001_registers_with_today_start_and_later_due_date PASSED [  1%]
+app/tests/integration/test_loan_request_management.py::test_create_loan_request_endpoint_002_registers_with_same_start_and_due_date PASSED [  2%]
+app/tests/integration/test_loan_request_management.py::test_create_loan_request_endpoint_003_nonexistent_equipment_returns_404 PASSED [  3%]
+app/tests/integration/test_loan_request_management.py::test_create_loan_request_endpoint_004_inactive_equipment_returns_409 PASSED [  5%]
+app/tests/integration/test_loan_request_management.py::test_create_loan_request_endpoint_005_past_start_date_returns_400 PASSED [  6%]
+app/tests/integration/test_loan_request_management.py::test_create_loan_request_endpoint_006_due_date_before_start_date_returns_400 PASSED [  7%]
+app/tests/integration/test_loan_request_management.py::test_create_loan_request_endpoint_007_overlap_with_approved_request_returns_409 PASSED [  9%]
+app/tests/integration/test_loan_request_management.py::test_create_loan_request_endpoint_008_overlap_with_on_loan_request_returns_409 PASSED [ 10%]
+app/tests/integration/test_loan_request_management.py::test_create_loan_request_endpoint_009_overlap_with_pending_request_is_allowed PASSED [ 11%]
+app/tests/integration/test_loan_request_management.py::test_create_loan_request_endpoint_010_empty_purpose_returns_422 PASSED [ 13%]
+app/tests/integration/test_loan_request_management.py::test_create_loan_request_endpoint_011_purpose_too_long_returns_422 PASSED [ 14%]
+app/tests/integration/test_loan_request_management.py::test_create_loan_request_endpoint_012_non_numeric_equipment_id_returns_422 PASSED [ 15%]
+app/tests/integration/test_loan_request_management.py::test_create_loan_request_endpoint_013_missing_equipment_id_returns_422 PASSED [ 17%]
+app/tests/integration/test_loan_request_management.py::test_create_loan_request_endpoint_014_missing_authorization_header_returns_401 PASSED [ 18%]
+app/tests/integration/test_loan_request_management.py::test_create_loan_request_endpoint_015_password_change_not_completed_returns_403 PASSED [ 19%]
+app/tests/integration/test_loan_request_management.py::test_cancel_loan_request_endpoint_001_cancels_pending_request_with_reason PASSED [ 21%]
+app/tests/integration/test_loan_request_management.py::test_cancel_loan_request_endpoint_002_cancels_approved_request_without_reason PASSED [ 22%]
+app/tests/integration/test_loan_request_management.py::test_cancel_loan_request_endpoint_003_nonexistent_id_returns_404 PASSED [ 23%]
+app/tests/integration/test_loan_request_management.py::test_cancel_loan_request_endpoint_004_other_users_request_returns_404 PASSED [ 25%]
+app/tests/integration/test_loan_request_management.py::test_cancel_loan_request_endpoint_005_rejected_request_returns_409 PASSED [ 26%]
+app/tests/integration/test_loan_request_management.py::test_cancel_loan_request_endpoint_006_on_loan_request_returns_409 PASSED [ 27%]
+app/tests/integration/test_loan_request_management.py::test_cancel_loan_request_endpoint_007_reason_too_long_returns_422 PASSED [ 28%]
+app/tests/integration/test_loan_request_management.py::test_cancel_loan_request_endpoint_008_missing_authorization_header_returns_401 PASSED [ 30%]
+app/tests/integration/test_loan_request_management.py::test_cancel_loan_request_endpoint_009_password_change_not_completed_returns_403 PASSED [ 31%]
+app/tests/integration/test_loan_request_management.py::test_get_loan_requests_endpoint_001_default_scope_mine_excludes_other_users PASSED [ 32%]
+app/tests/integration/test_loan_request_management.py::test_get_loan_requests_endpoint_002_scope_mine_with_status_filter PASSED [ 34%]
+app/tests/integration/test_loan_request_management.py::test_get_loan_requests_endpoint_003_admin_scope_all_returns_all_users_requests PASSED [ 35%]
+app/tests/integration/test_loan_request_management.py::test_get_loan_requests_endpoint_004_admin_scope_overdue_ignores_status_param PASSED [ 36%]
+app/tests/integration/test_loan_request_management.py::test_get_loan_requests_endpoint_005_general_user_scope_all_returns_403 PASSED [ 38%]
+app/tests/integration/test_loan_request_management.py::test_get_loan_requests_endpoint_006_general_user_scope_overdue_returns_403 PASSED [ 39%]
+app/tests/integration/test_loan_request_management.py::test_get_loan_requests_endpoint_007_invalid_scope_value_returns_422 PASSED [ 40%]
+app/tests/integration/test_loan_request_management.py::test_get_loan_requests_endpoint_008_missing_authorization_header_returns_401 PASSED [ 42%]
+app/tests/integration/test_loan_request_management.py::test_get_loan_requests_endpoint_009_password_change_not_completed_returns_403 PASSED [ 43%]
+app/tests/integration/test_loan_request_management.py::test_get_loan_request_endpoint_001_returns_own_request_detail PASSED [ 44%]
+app/tests/integration/test_loan_request_management.py::test_get_loan_request_endpoint_002_admin_can_view_other_users_request_detail PASSED [ 46%]
+app/tests/integration/test_loan_request_management.py::test_get_loan_request_endpoint_003_nonexistent_id_returns_404 PASSED [ 47%]
+app/tests/integration/test_loan_request_management.py::test_get_loan_request_endpoint_004_general_user_other_users_request_returns_404 PASSED [ 48%]
+app/tests/integration/test_loan_request_management.py::test_get_loan_request_endpoint_005_non_numeric_id_returns_422 PASSED [ 50%]
+app/tests/integration/test_loan_request_management.py::test_get_loan_request_endpoint_006_missing_authorization_header_returns_401 PASSED [ 51%]
+app/tests/integration/test_loan_request_management.py::test_get_loan_request_endpoint_007_password_change_not_completed_returns_403 PASSED [ 52%]
+app/tests/integration/test_loan_request_management.py::test_approve_loan_request_endpoint_001_approves_pending_request_with_future_start_date PASSED [ 53%]
+app/tests/integration/test_loan_request_management.py::test_approve_loan_request_endpoint_002_approves_request_with_today_start_date PASSED [ 55%]
+app/tests/integration/test_loan_request_management.py::test_approve_loan_request_endpoint_003_nonexistent_id_returns_404 PASSED [ 56%]
+app/tests/integration/test_loan_request_management.py::test_approve_loan_request_endpoint_004_already_approved_request_returns_409 PASSED [ 57%]
+app/tests/integration/test_loan_request_management.py::test_approve_loan_request_endpoint_005_past_start_date_returns_409 PASSED [ 59%]
+app/tests/integration/test_loan_request_management.py::test_approve_loan_request_endpoint_006_overlap_with_approved_request_returns_409 PASSED [ 60%]
+app/tests/integration/test_loan_request_management.py::test_approve_loan_request_endpoint_007_non_admin_user_returns_403 PASSED [ 61%]
+app/tests/integration/test_loan_request_management.py::test_approve_loan_request_endpoint_008_missing_authorization_header_returns_401 PASSED [ 63%]
+app/tests/integration/test_loan_request_management.py::test_approve_loan_request_endpoint_009_password_change_not_completed_admin_returns_403 PASSED [ 64%]
+app/tests/integration/test_loan_request_management.py::test_reject_loan_request_endpoint_001_rejects_pending_request_with_reason PASSED [ 65%]
+app/tests/integration/test_loan_request_management.py::test_reject_loan_request_endpoint_002_nonexistent_id_returns_404 PASSED [ 67%]
+app/tests/integration/test_loan_request_management.py::test_reject_loan_request_endpoint_003_already_approved_request_returns_409 PASSED [ 68%]
+app/tests/integration/test_loan_request_management.py::test_reject_loan_request_endpoint_004_empty_reason_returns_422 PASSED [ 69%]
+app/tests/integration/test_loan_request_management.py::test_reject_loan_request_endpoint_005_reason_too_long_returns_422 PASSED [ 71%]
+app/tests/integration/test_loan_request_management.py::test_reject_loan_request_endpoint_006_missing_reason_returns_422 PASSED [ 72%]
+app/tests/integration/test_loan_request_management.py::test_reject_loan_request_endpoint_007_non_admin_user_returns_403 PASSED [ 73%]
+app/tests/integration/test_loan_request_management.py::test_reject_loan_request_endpoint_008_missing_authorization_header_returns_401 PASSED [ 75%]
+app/tests/integration/test_loan_request_management.py::test_reject_loan_request_endpoint_009_password_change_not_completed_admin_returns_403 PASSED [ 76%]
+app/tests/integration/test_loan_request_management.py::test_admin_cancel_loan_request_endpoint_001_cancels_approved_request_with_reason PASSED [ 77%]
+app/tests/integration/test_loan_request_management.py::test_admin_cancel_loan_request_endpoint_002_nonexistent_id_returns_404 PASSED [ 78%]
+app/tests/integration/test_loan_request_management.py::test_admin_cancel_loan_request_endpoint_003_pending_request_returns_409 PASSED [ 80%]
+app/tests/integration/test_loan_request_management.py::test_admin_cancel_loan_request_endpoint_004_empty_reason_returns_422 PASSED [ 81%]
+app/tests/integration/test_loan_request_management.py::test_admin_cancel_loan_request_endpoint_005_missing_reason_returns_422 PASSED [ 82%]
+app/tests/integration/test_loan_request_management.py::test_admin_cancel_loan_request_endpoint_006_non_admin_user_returns_403 PASSED [ 84%]
+app/tests/integration/test_loan_request_management.py::test_admin_cancel_loan_request_endpoint_007_missing_authorization_header_returns_401 PASSED [ 85%]
+app/tests/integration/test_loan_request_management.py::test_admin_cancel_loan_request_endpoint_008_password_change_not_completed_admin_returns_403 PASSED [ 86%]
+app/tests/integration/test_loan_request_management.py::test_get_notifications_endpoint_001_returns_own_notifications_in_descending_order PASSED [ 88%]
+app/tests/integration/test_loan_request_management.py::test_get_notifications_endpoint_002_returns_empty_list_when_no_notifications PASSED [ 89%]
+app/tests/integration/test_loan_request_management.py::test_get_notifications_endpoint_003_missing_authorization_header_returns_401 PASSED [ 90%]
+app/tests/integration/test_loan_request_management.py::test_get_notifications_endpoint_004_password_change_not_completed_returns_403 PASSED [ 92%]
+app/tests/integration/test_loan_request_management.py::test_mark_notification_as_read_endpoint_001_marks_unread_notification_as_read PASSED [ 93%]
+app/tests/integration/test_loan_request_management.py::test_mark_notification_as_read_endpoint_002_marking_already_read_notification_succeeds PASSED [ 94%]
+app/tests/integration/test_loan_request_management.py::test_mark_notification_as_read_endpoint_003_nonexistent_id_returns_404 PASSED [ 96%]
+app/tests/integration/test_loan_request_management.py::test_mark_notification_as_read_endpoint_004_other_users_notification_returns_404 PASSED [ 97%]
+app/tests/integration/test_loan_request_management.py::test_mark_notification_as_read_endpoint_005_missing_authorization_header_returns_401 PASSED [ 98%]
+app/tests/integration/test_loan_request_management.py::test_mark_notification_as_read_endpoint_006_password_change_not_completed_returns_403 PASSED [100%]
+
+============================== warnings summary ===============================
+.venv\Lib\site-packages\fastapi\testclient.py:1
+  C:\Users\youta\Desktop\management\hojou_sample\hojou_v0.2.0_sample_Sonnet-5_high\backend\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================== 76 passed, 1 warning in 65.85s (0:01:05) ===================
