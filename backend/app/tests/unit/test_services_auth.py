@@ -203,6 +203,7 @@ def test_change_password_002_matching_current_password_updates_and_reissues_toke
     assert called_change_required is False
     assert called_token_generation == 3
     assert token_response.access_token == "access-token"
+    assert token_response.token_type == "bearer"
     assert token_response.password_change_required is False
 
 
@@ -262,7 +263,13 @@ def test_reset_password_002_target_user_found_updates_password_and_flag(mocker):
     assert called_hashed_password == "new-hashed"
     assert called_change_required is True
     assert called_token_generation == 2
+    assert user_response.user_id == mock_updated_user.user_id
+    assert user_response.name == mock_updated_user.name
+    assert user_response.department == mock_updated_user.department
+    assert user_response.role == mock_updated_user.role
+    assert user_response.active_flag == mock_updated_user.active_flag
     assert user_response.password_change_required_flag is True
+    assert user_response.updated_at == mock_updated_user.updated_at
 
 
 # ==================================================
@@ -321,12 +328,19 @@ def test_update_user_info_003_other_active_admins_exist_allows_change(mocker):
     )
     mock_update_user = mocker.patch("app.services.crud.update_user", return_value=mock_updated_user)
 
-    services.update_user_info(
+    user_response = services.update_user_info(
         db=mocker.Mock(), user_id="u001", name="テスト太郎", department="総務部", role="一般"
     )
 
     called_token_generation = mock_update_user.call_args.args[-1]
     assert called_token_generation == 2
+    assert user_response.user_id == mock_updated_user.user_id
+    assert user_response.name == mock_updated_user.name
+    assert user_response.department == mock_updated_user.department
+    assert user_response.role == mock_updated_user.role
+    assert user_response.active_flag == mock_updated_user.active_flag
+    assert user_response.password_change_required_flag == mock_updated_user.password_change_required_flag
+    assert user_response.updated_at == mock_updated_user.updated_at
 
 
 # ========== 単体テストNo.4 ==========
@@ -346,11 +360,18 @@ def test_update_user_info_004_inactive_admin_skips_protection_check(mocker):
     )
     mocker.patch("app.services.crud.update_user", return_value=mock_updated_user)
 
-    services.update_user_info(
+    user_response = services.update_user_info(
         db=mocker.Mock(), user_id="u001", name="テスト太郎", department="総務部", role="一般"
     )
 
     mock_count_active_admin.assert_not_called()
+    assert user_response.user_id == mock_updated_user.user_id
+    assert user_response.name == mock_updated_user.name
+    assert user_response.department == mock_updated_user.department
+    assert user_response.role == mock_updated_user.role
+    assert user_response.active_flag == mock_updated_user.active_flag
+    assert user_response.password_change_required_flag == mock_updated_user.password_change_required_flag
+    assert user_response.updated_at == mock_updated_user.updated_at
 
 
 # ========== 単体テストNo.5 ==========
@@ -369,12 +390,19 @@ def test_update_user_info_005_role_changed_increments_token_generation(mocker):
     )
     mock_update_user = mocker.patch("app.services.crud.update_user", return_value=mock_updated_user)
 
-    services.update_user_info(
+    user_response = services.update_user_info(
         db=mocker.Mock(), user_id="u001", name="テスト太郎", department="総務部", role="管理者"
     )
 
     called_token_generation = mock_update_user.call_args.args[-1]
     assert called_token_generation == 2
+    assert user_response.user_id == mock_updated_user.user_id
+    assert user_response.name == mock_updated_user.name
+    assert user_response.department == mock_updated_user.department
+    assert user_response.role == mock_updated_user.role
+    assert user_response.active_flag == mock_updated_user.active_flag
+    assert user_response.password_change_required_flag == mock_updated_user.password_change_required_flag
+    assert user_response.updated_at == mock_updated_user.updated_at
 
 
 # ========== 単体テストNo.6 ==========
@@ -393,12 +421,19 @@ def test_update_user_info_006_role_unchanged_keeps_token_generation(mocker):
     )
     mock_update_user = mocker.patch("app.services.crud.update_user", return_value=mock_updated_user)
 
-    services.update_user_info(
+    user_response = services.update_user_info(
         db=mocker.Mock(), user_id="u001", name="テスト太郎", department="総務部", role="一般"
     )
 
     called_token_generation = mock_update_user.call_args.args[-1]
     assert called_token_generation == 1
+    assert user_response.user_id == mock_updated_user.user_id
+    assert user_response.name == mock_updated_user.name
+    assert user_response.department == mock_updated_user.department
+    assert user_response.role == mock_updated_user.role
+    assert user_response.active_flag == mock_updated_user.active_flag
+    assert user_response.password_change_required_flag == mock_updated_user.password_change_required_flag
+    assert user_response.updated_at == mock_updated_user.updated_at
 
 
 # ==================================================
@@ -455,7 +490,7 @@ def test_deactivate_user_003_other_active_admins_exist_allows_deactivation(mocke
         "app.services.crud.update_user_active_flag", return_value=mock_updated_user
     )
 
-    services.deactivate_user(db=mocker.Mock(), user_id="u001")
+    user_response = services.deactivate_user(db=mocker.Mock(), user_id="u001")
 
     _, _, called_user_id, called_active_flag, called_token_generation = (
         mock_update_active_flag.call_args.args
@@ -463,6 +498,13 @@ def test_deactivate_user_003_other_active_admins_exist_allows_deactivation(mocke
     assert called_user_id == "u001"
     assert called_active_flag is False
     assert called_token_generation == 2
+    assert user_response.user_id == mock_updated_user.user_id
+    assert user_response.name == mock_updated_user.name
+    assert user_response.department == mock_updated_user.department
+    assert user_response.role == mock_updated_user.role
+    assert user_response.active_flag == mock_updated_user.active_flag
+    assert user_response.password_change_required_flag == mock_updated_user.password_change_required_flag
+    assert user_response.updated_at == mock_updated_user.updated_at
 
 
 # ========== 単体テストNo.4 ==========
@@ -484,10 +526,17 @@ def test_deactivate_user_004_general_user_skips_protection_check(mocker):
         "app.services.crud.update_user_active_flag", return_value=mock_updated_user
     )
 
-    services.deactivate_user(db=mocker.Mock(), user_id="u001")
+    user_response = services.deactivate_user(db=mocker.Mock(), user_id="u001")
 
     mock_count_active_admin.assert_not_called()
     mock_update_active_flag.assert_called_once()
+    assert user_response.user_id == mock_updated_user.user_id
+    assert user_response.name == mock_updated_user.name
+    assert user_response.department == mock_updated_user.department
+    assert user_response.role == mock_updated_user.role
+    assert user_response.active_flag == mock_updated_user.active_flag
+    assert user_response.password_change_required_flag == mock_updated_user.password_change_required_flag
+    assert user_response.updated_at == mock_updated_user.updated_at
 
 
 # ========== 単体テストNo.5 ==========
@@ -507,6 +556,13 @@ def test_deactivate_user_005_inactive_admin_skips_protection_check(mocker):
     )
     mocker.patch("app.services.crud.update_user_active_flag", return_value=mock_updated_user)
 
-    services.deactivate_user(db=mocker.Mock(), user_id="u001")
+    user_response = services.deactivate_user(db=mocker.Mock(), user_id="u001")
 
     mock_count_active_admin.assert_not_called()
+    assert user_response.user_id == mock_updated_user.user_id
+    assert user_response.name == mock_updated_user.name
+    assert user_response.department == mock_updated_user.department
+    assert user_response.role == mock_updated_user.role
+    assert user_response.active_flag == mock_updated_user.active_flag
+    assert user_response.password_change_required_flag == mock_updated_user.password_change_required_flag
+    assert user_response.updated_at == mock_updated_user.updated_at
