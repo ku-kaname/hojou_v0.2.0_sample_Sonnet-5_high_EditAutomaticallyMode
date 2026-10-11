@@ -98,6 +98,7 @@ def test_get_current_active_user_001_decode_failure_raises_401(mocker):
         auth.get_current_active_user(token="invalid-token", db=mocker.Mock())
 
     assert exc_info.value.status_code == 401
+    assert exc_info.value.detail == "資格情報を検証できませんでした"
 
 
 # ========== 単体テストNo.2 ==========
@@ -109,6 +110,7 @@ def test_get_current_active_user_002_missing_sub_raises_401(mocker):
         auth.get_current_active_user(token="token", db=mocker.Mock())
 
     assert exc_info.value.status_code == 401
+    assert exc_info.value.detail == "資格情報を検証できませんでした"
 
 
 # ========== 単体テストNo.3 ==========
@@ -120,6 +122,7 @@ def test_get_current_active_user_003_missing_token_generation_raises_401(mocker)
         auth.get_current_active_user(token="token", db=mocker.Mock())
 
     assert exc_info.value.status_code == 401
+    assert exc_info.value.detail == "資格情報を検証できませんでした"
 
 
 # ========== 単体テストNo.4 ==========
@@ -132,6 +135,7 @@ def test_get_current_active_user_004_user_not_found_raises_401(mocker):
         auth.get_current_active_user(token="token", db=mocker.Mock())
 
     assert exc_info.value.status_code == 401
+    assert exc_info.value.detail == "資格情報を検証できませんでした"
 
 
 # ========== 単体テストNo.5 ==========
@@ -145,6 +149,7 @@ def test_get_current_active_user_005_inactive_user_raises_401(mocker):
         auth.get_current_active_user(token="token", db=mocker.Mock())
 
     assert exc_info.value.status_code == 401
+    assert exc_info.value.detail == "資格情報を検証できませんでした"
 
 
 # ========== 単体テストNo.6 ==========
@@ -158,6 +163,7 @@ def test_get_current_active_user_006_token_generation_mismatch_raises_401(mocker
         auth.get_current_active_user(token="token", db=mocker.Mock())
 
     assert exc_info.value.status_code == 401
+    assert exc_info.value.detail == "資格情報を検証できませんでした"
 
 
 # ========== 単体テストNo.7 ==========
@@ -190,6 +196,7 @@ def test_require_admin_001_non_admin_role_raises_403():
         auth.require_admin(current_user=non_admin_user)
 
     assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "この操作には管理者権限が必要です。"
 
 
 # ========== 単体テストNo.2 ==========
@@ -221,6 +228,7 @@ def test_require_password_changed_001_change_required_raises_403():
         auth.require_password_changed(current_user=user_requiring_change)
 
     assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "初回パスワード変更が完了していません。パスワードを変更してください。"
 
 
 # ========== 単体テストNo.2 ==========
