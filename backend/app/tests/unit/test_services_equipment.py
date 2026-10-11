@@ -274,9 +274,10 @@ def test_update_equipment_002_asset_number_changed_duplicate_raises_409(mocker):
     mock_target_equipment = SimpleNamespace(asset_number="A-001")
     mocker.patch("app.services.crud.get_equipment_by_id", return_value=mock_target_equipment)
     mock_duplicate_equipment = SimpleNamespace(asset_number="A-002")
-    mocker.patch(
+    mock_get_equipment_by_asset_number = mocker.patch(
         "app.services.crud.get_equipment_by_asset_number", return_value=mock_duplicate_equipment
     )
+    mock_update_equipment = mocker.patch("app.services.crud.update_equipment")
 
     with pytest.raises(HTTPException) as exc_info:
         services.update_equipment(
@@ -291,6 +292,8 @@ def test_update_equipment_002_asset_number_changed_duplicate_raises_409(mocker):
 
     assert exc_info.value.status_code == 409
     assert exc_info.value.detail == "この資産番号は既に使用されています。"
+    mock_get_equipment_by_asset_number.assert_called_once()
+    mock_update_equipment.assert_not_called()
 
 
 # ========== 単体テストNo.3 ==========
@@ -299,7 +302,9 @@ def test_update_equipment_003_asset_number_changed_no_duplicate_updates(mocker):
     now = dt.datetime.now(dt.UTC)
     mock_target_equipment = SimpleNamespace(asset_number="A-001")
     mocker.patch("app.services.crud.get_equipment_by_id", return_value=mock_target_equipment)
-    mocker.patch("app.services.crud.get_equipment_by_asset_number", return_value=None)
+    mock_get_equipment_by_asset_number = mocker.patch(
+        "app.services.crud.get_equipment_by_asset_number", return_value=None
+    )
     mock_updated_equipment = SimpleNamespace(
         id=1,
         asset_number="A-002",
@@ -326,7 +331,9 @@ def test_update_equipment_003_asset_number_changed_no_duplicate_updates(mocker):
         location="",
     )
 
+    mock_get_equipment_by_asset_number.assert_called_once()
     mock_update_equipment.assert_called_once()
+    assert mock_update_equipment.call_args.args[3] == "A-002"
     assert equipment_response.asset_number == "A-002"
 
 
@@ -476,7 +483,7 @@ def test_bulk_import_equipment_002_decode_failure_raises_400(mocker):
 # ========== 単体テストNo.3 ==========
 # ヘッダー行の列数が5でない場合に400エラーが発生すること
 def test_bulk_import_equipment_003_invalid_header_column_count_raises_400(mocker):
-    file_content = "資産番号,備品名,分類,説明".encode("utf-8")
+    file_content = "資産番号,備品名,分類,説明".encode()
 
     with pytest.raises(HTTPException) as exc_info:
         services.bulk_import_equipment(db=mocker.Mock(), file_content=file_content)
@@ -674,7 +681,8 @@ def test_bulk_import_equipment_013_multiple_errors_sorted_ascending_by_row_numbe
 
 
 # ========== 単体テストNo.14 ==========
-# 検証エラーが1件もない場合、全データ行を一括登録し、貸出状況="貸出可"固定・返却予定日=null固定でレスポンスを返却すること
+# 検証エラーが1件もない場合、全データ行を一括登録し、
+# 貸出状況="貸出可"固定・返却予定日=null固定でレスポンスを返却すること
 def test_bulk_import_equipment_014_valid_csv_bulk_creates_equipment(mocker):
     header = "資産番号,備品名,分類,説明,保管場所"
     row_1 = "A-001,ノートPC,PC,,"
