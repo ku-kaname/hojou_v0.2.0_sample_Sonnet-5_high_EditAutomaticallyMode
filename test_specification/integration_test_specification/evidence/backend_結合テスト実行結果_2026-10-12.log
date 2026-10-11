@@ -1,0 +1,64 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.13, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\youta\Desktop\management\hojou_sample\hojou_v0.2.0_sample_Sonnet-5_high\backend\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\youta\Desktop\management\hojou_sample\hojou_v0.2.0_sample_Sonnet-5_high\backend
+configfile: pyproject.toml
+plugins: anyio-4.15.1, cov-7.1.0, mock-3.16.0
+collecting ... collected 48 items
+
+app/tests/integration/test_my_info.py::test_get_my_info_endpoint_001_admin_before_password_change_can_get_own_info PASSED [  2%]
+app/tests/integration/test_my_info.py::test_get_my_info_endpoint_002_missing_authorization_header_returns_401 PASSED [  4%]
+app/tests/integration/test_my_info.py::test_get_my_info_endpoint_003_deactivated_user_token_returns_401 PASSED [  6%]
+app/tests/integration/test_my_info.py::test_change_password_endpoint_001_valid_current_password_changes_password PASSED [  8%]
+app/tests/integration/test_my_info.py::test_change_password_endpoint_002_wrong_current_password_returns_400 PASSED [ 10%]
+app/tests/integration/test_my_info.py::test_change_password_endpoint_003_new_password_too_short_returns_422 PASSED [ 12%]
+app/tests/integration/test_my_info.py::test_change_password_endpoint_004_missing_new_password_returns_422 PASSED [ 14%]
+app/tests/integration/test_my_info.py::test_change_password_endpoint_005_missing_authorization_header_returns_401 PASSED [ 16%]
+app/tests/integration/test_my_info.py::test_change_password_endpoint_006_old_token_is_invalidated_after_change PASSED [ 18%]
+app/tests/integration/test_user_management.py::test_get_users_endpoint_001_admin_can_get_user_list_including_deactivated PASSED [ 20%]
+app/tests/integration/test_user_management.py::test_get_users_endpoint_002_non_admin_user_returns_403 PASSED [ 22%]
+app/tests/integration/test_user_management.py::test_get_users_endpoint_003_password_change_not_completed_returns_403 PASSED [ 25%]
+app/tests/integration/test_user_management.py::test_get_users_endpoint_004_missing_authorization_header_returns_401 PASSED [ 27%]
+app/tests/integration/test_user_management.py::test_register_user_endpoint_001_admin_can_register_new_user PASSED [ 29%]
+app/tests/integration/test_user_management.py::test_register_user_endpoint_002_duplicate_user_id_returns_409 PASSED [ 31%]
+app/tests/integration/test_user_management.py::test_register_user_endpoint_003_deactivated_user_id_cannot_be_reused PASSED [ 33%]
+app/tests/integration/test_user_management.py::test_register_user_endpoint_004_non_admin_user_returns_403 PASSED [ 35%]
+app/tests/integration/test_user_management.py::test_register_user_endpoint_005_password_change_not_completed_returns_403 PASSED [ 37%]
+app/tests/integration/test_user_management.py::test_register_user_endpoint_006_missing_authorization_header_returns_401 PASSED [ 39%]
+app/tests/integration/test_user_management.py::test_register_user_endpoint_007_invalid_user_id_characters_returns_422 PASSED [ 41%]
+app/tests/integration/test_user_management.py::test_register_user_endpoint_008_missing_role_returns_422 PASSED [ 43%]
+app/tests/integration/test_user_management.py::test_get_user_endpoint_001_admin_can_get_existing_user_detail PASSED [ 45%]
+app/tests/integration/test_user_management.py::test_get_user_endpoint_002_nonexistent_user_id_returns_404 PASSED [ 47%]
+app/tests/integration/test_user_management.py::test_get_user_endpoint_003_non_admin_user_returns_403 PASSED [ 50%]
+app/tests/integration/test_user_management.py::test_get_user_endpoint_004_missing_authorization_header_returns_401 PASSED [ 52%]
+app/tests/integration/test_user_management.py::test_update_user_endpoint_001_name_and_department_change_keeps_token_generation PASSED [ 54%]
+app/tests/integration/test_user_management.py::test_update_user_endpoint_002_role_change_invalidates_old_token PASSED [ 56%]
+app/tests/integration/test_user_management.py::test_update_user_endpoint_003_nonexistent_user_id_returns_404 PASSED [ 58%]
+app/tests/integration/test_user_management.py::test_update_user_endpoint_004_last_active_admin_role_change_returns_409 PASSED [ 60%]
+app/tests/integration/test_user_management.py::test_update_user_endpoint_005_non_admin_user_returns_403 PASSED [ 62%]
+app/tests/integration/test_user_management.py::test_update_user_endpoint_006_missing_authorization_header_returns_401 PASSED [ 64%]
+app/tests/integration/test_user_management.py::test_update_user_endpoint_007_empty_name_returns_422 PASSED [ 66%]
+app/tests/integration/test_user_management.py::test_update_user_endpoint_008_missing_role_returns_422 PASSED [ 68%]
+app/tests/integration/test_user_management.py::test_deactivate_user_endpoint_001_deactivating_user_invalidates_old_token PASSED [ 70%]
+app/tests/integration/test_user_management.py::test_deactivate_user_endpoint_002_nonexistent_user_id_returns_404 PASSED [ 72%]
+app/tests/integration/test_user_management.py::test_deactivate_user_endpoint_003_last_active_admin_returns_409 PASSED [ 75%]
+app/tests/integration/test_user_management.py::test_deactivate_user_endpoint_004_non_admin_user_returns_403 PASSED [ 77%]
+app/tests/integration/test_user_management.py::test_deactivate_user_endpoint_005_missing_authorization_header_returns_401 PASSED [ 79%]
+app/tests/integration/test_user_management.py::test_activate_user_endpoint_001_reactivating_user_keeps_token_generation PASSED [ 81%]
+app/tests/integration/test_user_management.py::test_activate_user_endpoint_002_nonexistent_user_id_returns_404 PASSED [ 83%]
+app/tests/integration/test_user_management.py::test_activate_user_endpoint_003_non_admin_user_returns_403 PASSED [ 85%]
+app/tests/integration/test_user_management.py::test_activate_user_endpoint_004_missing_authorization_header_returns_401 PASSED [ 87%]
+app/tests/integration/test_user_management.py::test_reset_password_endpoint_001_resetting_password_invalidates_old_token PASSED [ 89%]
+app/tests/integration/test_user_management.py::test_reset_password_endpoint_002_nonexistent_user_id_returns_404 PASSED [ 91%]
+app/tests/integration/test_user_management.py::test_reset_password_endpoint_003_non_admin_user_returns_403 PASSED [ 93%]
+app/tests/integration/test_user_management.py::test_reset_password_endpoint_004_missing_authorization_header_returns_401 PASSED [ 95%]
+app/tests/integration/test_user_management.py::test_reset_password_endpoint_005_initial_password_too_short_returns_422 PASSED [ 97%]
+app/tests/integration/test_user_management.py::test_reset_password_endpoint_006_missing_initial_password_returns_422 PASSED [100%]
+
+============================== warnings summary ===============================
+.venv\Lib\site-packages\fastapi\testclient.py:1
+  C:\Users\youta\Desktop\management\hojou_sample\hojou_v0.2.0_sample_Sonnet-5_high\backend\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================= 48 passed, 1 warning in 22.72s ========================
