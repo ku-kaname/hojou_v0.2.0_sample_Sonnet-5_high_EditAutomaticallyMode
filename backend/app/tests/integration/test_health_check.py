@@ -21,7 +21,7 @@ def test_health_check_001_db_connected_returns_ok(client: TestClient) -> None:
 # ========== 結合テストNo.2 ==========
 # 異常系 - DB接続不可時に疎通確認結果を返却
 def test_health_check_002_db_disconnected_returns_error(
-    client: TestClient, postgres_container_stopped: None
+    client: TestClient, db_connection_unreachable: None
 ) -> None:
     response = client.get("/health-check")
 

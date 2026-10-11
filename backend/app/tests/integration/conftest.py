@@ -9,6 +9,7 @@ FastAPI TestClientの生成・テストケース間のデータ分離を行う�
 """
 
 import os
+import socket
 import subprocess
 import time
 import uuid
@@ -16,7 +17,7 @@ from collections.abc import Generator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
 
 # ====================================================================================================
 # 結合テスト専用の使い捨てPostgreSQLコンテナ起動・環境変数設定
@@ -64,17 +65,34 @@ def _start_postgres_container() -> int:
 
 
 def _wait_for_postgres_ready(timeout_seconds: int = 60) -> None:
-    """コンテナ内のpg_isreadyが成功するまで待機する（起動完了待ち）"""
+    """
+    PostgreSQLの起動完了を待機する
+
+    コンテナ内のpg_isreadyの成功（DBサーバー自体の起動完了）に加え、
+    ホスト側ポート（127.0.0.1:_host_port）への実際のTCP接続成功も確認する。
+    pg_isreadyはコンテナ内部から確認するため、コンテナ再起動（docker stop/start）後に
+    ホスト側のポートフォワーディングの復旧が内部のDB起動より遅れるケースを検知できない
+    （ホスト側の接続確認なしでは、以降のテストがDB接続タイムアウトで失敗し続ける）。
+    """
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         result = subprocess.run(
             ["docker", "exec", _CONTAINER_NAME, "pg_isready", "-U", _POSTGRES_USER, "-d", _POSTGRES_DB],
             capture_output=True, text=True,
         )
-        if result.returncode == 0:
+        if result.returncode == 0 and _is_host_port_reachable():
             return
         time.sleep(1)
     raise TimeoutError("結合テスト用PostgreSQLコンテナの起動待機がタイムアウトしました")
+
+
+def _is_host_port_reachable() -> bool:
+    """ホスト側ポート（127.0.0.1:_host_port）へのTCP接続が確立できるかを確認する"""
+    try:
+        with socket.create_connection(("127.0.0.1", _host_port), timeout=1):
+            return True
+    except OSError:
+        return False
 
 
 def _stop_postgres_container() -> None:
@@ -111,25 +129,41 @@ subprocess.run(
 )
 
 # 環境変数が確定した後に、初めてアプリ本体をインポートする
-from app import services  # noqa: E402
+from app import main, services  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
 from app.main import app  # noqa: E402
 
 
-@pytest.fixture
-def postgres_container_stopped() -> Generator[None, None, None]:
-    """
-    PostgreSQLコンテナを一時的に停止し、DB接続不可状態を再現する（テスト関数内でのみ使用）
+def _find_unused_port() -> int:
+    """現在どのプロセスも待ち受けていないホスト側ポート番号を1つ取得する"""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as temp_socket:
+        temp_socket.bind(("127.0.0.1", 0))
+        return temp_socket.getsockname()[1]
 
-    テスト終了後は、以降のテストに影響を与えないよう必ずコンテナを再起動し、
-    起動完了（pg_isready成功）まで待機する。
+
+@pytest.fixture
+def db_connection_unreachable(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
     """
-    subprocess.run(["docker", "stop", _CONTAINER_NAME], check=True, capture_output=True, text=True)
+    DB接続不可状態を再現する（テスト関数内でのみ使用）
+
+    結合テスト全体で共有している使い捨てPostgreSQLコンテナ自体は停止・再起動しない
+    （本環境（Windows + Docker Desktop）では、コンテナ再起動後にホスト側ポートフォワーディングが
+    復旧せず、以降の全テストに悪影響を及ぼす事象を確認したため）。
+    代わりに、ヘルスチェック処理が参照するengine（app.main.engine）を、何も待ち受けていない
+    未使用ポートを指す一時engineに差し替えることで、DB接続失敗を再現する。
+    一時engineには明示的なconnect_timeoutを設定する（本環境では、未使用ポートへの接続は
+    タイムアウト未設定の場合に長時間ブロックされることを確認済みのため）。
+    """
+    unreachable_port = _find_unused_port()
+    temporary_engine = create_engine(
+        f"postgresql+psycopg://{_POSTGRES_USER}:{_POSTGRES_PASSWORD}@127.0.0.1:{unreachable_port}/{_POSTGRES_DB}",
+        connect_args={"connect_timeout": 3},
+    )
+    monkeypatch.setattr(main, "engine", temporary_engine)
     try:
         yield
     finally:
-        subprocess.run(["docker", "start", _CONTAINER_NAME], check=True, capture_output=True, text=True)
-        _wait_for_postgres_ready()
+        temporary_engine.dispose()
 
 
 @pytest.fixture(scope="session", autouse=True)
