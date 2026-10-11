@@ -15,7 +15,7 @@ _ADMIN_PASSWORD = "integration-test-admin-password"
 # テスト対象ファイル：main.py
 # テスト対象クラス：-
 # テスト対象メソッド：login_endpoint
-# テスト仕様書：test_specification/integration_test_specification/共通/ログイン_結合テスト仕様書_v0.2.0.md
+# テスト仕様書：test_specification/integration_test_specification/共通/ログイン_結合テスト仕様書.md
 # ==================================================
 
 
@@ -77,20 +77,12 @@ def test_login_endpoint_003_wrong_password_returns_401(client: TestClient) -> No
 
 # ========== 結合テストNo.4 ==========
 # 異常系 - ログイン失敗を5回連続した場合、5回目でアカウントが一時的にロックされること
+# （ロックが成立する5回目の時点でも、応答は1〜4回目と同じ通常の認証エラーメッセージのままであること）
 def test_login_endpoint_004_five_consecutive_failures_locks_account(client: TestClient) -> None:
-    for attempt_count in range(1, 5):
+    for attempt_count in range(1, 6):
         response = client.post("/token", data={"username": _ADMIN_USER_ID, "password": "wrong-password"})
         assert response.status_code == 401, f"{attempt_count}回目の失敗レスポンスが想定外"
         assert response.json() == {"detail": "ユーザーIDかパスワードが間違っています。"}
-
-    fifth_response = client.post("/token", data={"username": _ADMIN_USER_ID, "password": "wrong-password"})
-    assert fifth_response.status_code == 401
-    assert fifth_response.json() == {
-        "detail": (
-            "ログイン試行回数が上限に達したため、アカウントが一時的にロックされています。"
-            "しばらくしてから再度お試しください。"
-        )
-    }
 
     admin = _get_admin_from_db()
     _assert_locked_until_is_in_future(admin.locked_until)

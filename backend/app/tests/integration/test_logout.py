@@ -16,7 +16,7 @@ _CREDENTIALS_EXCEPTION_DETAIL = "資格情報を検証できませんでした"
 # テスト対象ファイル：main.py
 # テスト対象クラス：-
 # テスト対象メソッド：logout_endpoint
-# テスト仕様書：test_specification/integration_test_specification/共通/ログアウト_結合テスト仕様書_v0.2.0.md
+# テスト仕様書：test_specification/integration_test_specification/共通/ログアウト_結合テスト仕様書.md
 # ==================================================
 
 

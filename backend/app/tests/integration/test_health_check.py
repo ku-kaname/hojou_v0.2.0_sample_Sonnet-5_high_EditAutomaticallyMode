@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 # テスト対象ファイル：main.py
 # テスト対象クラス：-
 # テスト対象メソッド：health_check
-# テスト仕様書：test_specification/integration_test_specification/共通/ヘルスチェック_結合テスト仕様書_v0.2.0.md
+# テスト仕様書：test_specification/integration_test_specification/共通/ヘルスチェック_結合テスト仕様書.md
 # ==================================================
 
 
